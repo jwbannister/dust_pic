@@ -1,0 +1,109 @@
+"date","deployment","pm10_24","n","pm10_onlake","n_onlake","pm10_dunes","n_dunes","pm10_offlake","n_offlake","class","dunes"
+2015-01-23,"Mill Site",217,24,200,12,NA,NA,36,12,"onlake",NA
+2015-02-06,"Lizard Tail",154,24,98,15,NA,NA,77,9,"mixed",NA
+2015-02-06,"North Beach",175,24,175,24,NA,NA,20,0,"onlake",NA
+2015-02-06,"Shell Cut",333,24,20,0,NA,NA,333,24,"offlake",NA
+2015-02-07,"Shell Cut",262,24,113,10,NA,NA,169,14,"offlake",NA
+2015-02-24,"Keeler",212,24,20,0,213,21,212,24,"offlake",TRUE
+2015-03-31,"Mill Site",209,24,213,15,NA,NA,16,9,"onlake",NA
+2015-04-01,"Keeler",176,24,161,8,26,5,36,16,"onlake",NA
+2015-04-05,"Keeler",225,24,225,11,20,0,20,13,"onlake",NA
+2015-04-05,"Lizard Tail",155,24,147,13,NA,NA,28,10,"mixed",NA
+2015-04-05,"North Beach",224,24,225,20,NA,NA,19,4,"onlake",NA
+2015-04-14,"Keeler",279,24,20,0,279,15,279,24,"offlake",TRUE
+2015-04-14,"Mill Site",628,24,629,14,NA,NA,20,10,"onlake",NA
+2015-07-01,"Lizard Tail",200,24,205,13,NA,NA,16,10,"onlake",NA
+2015-08-01,"Keeler",205,24,22,8,176,5,203,16,"offlake",TRUE
+2015-08-01,"Mill Site",272,24,254,12,NA,NA,38,12,"onlake",NA
+2015-11-15,"Shell Cut",240,24,17,11,NA,NA,244,13,"offlake",NA
+2015-11-16,"Dirty Socks",216,24,216,24,NA,NA,20,0,"onlake",NA
+2015-11-16,"Keeler",801,24,20,0,801,24,801,24,"offlake",TRUE
+2015-11-16,"Lizard Tail",235,24,20,0,NA,NA,235,24,"offlake",NA
+2015-11-16,"Mill Site",413,24,413,24,NA,NA,20,0,"onlake",NA
+2015-11-16,"North Beach",445,24,20,0,NA,NA,445,24,"offlake",NA
+2015-11-16,"Olancha",385,24,385,23,NA,NA,19,1,"onlake",NA
+2015-11-16,"Shell Cut",238,24,238,24,NA,NA,20,0,"onlake",NA
+2015-11-16,"Stanley",157,24,158,22,NA,NA,19,2,"onlake",NA
+2015-11-24,"Dirty Socks",205,24,26,7,NA,NA,199,17,"offlake",NA
+2015-11-24,"Keeler",232,24,141,12,19,1,112,12,"mixed",NA
+2015-11-24,"Mill Site",1487,24,1299,11,NA,NA,209,13,"mixed",NA
+2015-11-24,"Olancha",207,24,19,2,NA,NA,208,22,"offlake",NA
+2015-11-24,"Shell Cut",730,24,23,6,NA,NA,727,18,"offlake",NA
+2015-12-10,"Olancha",225,24,20,0,NA,NA,225,24,"offlake",NA
+2015-12-10,"Shell Cut",296,24,293,15,NA,NA,23,9,"onlake",NA
+2016-01-30,"Olancha",280,24,20,0,NA,NA,280,24,"offlake",NA
+2016-01-30,"Stanley",168,24,14,9,NA,NA,174,15,"offlake",NA
+2016-02-01,"Keeler",237,24,20,0,238,21,237,24,"offlake",TRUE
+2016-03-05,"Lizard Tail",179,24,162,14,NA,NA,37,10,"onlake",NA
+2016-03-05,"Shell Cut",479,24,19,2,NA,NA,480,22,"offlake",NA
+2016-03-28,"Keeler",154,24,152,10,22,4,22,14,"onlake",NA
+2016-03-28,"North Beach",368,23,354,7,NA,NA,35,16,"onlake",NA
+2016-03-28,"Shell Cut",205,24,118,18,NA,NA,107,6,"mixed",NA
+2016-04-14,"Keeler",182,24,18,5,186,15,185,19,"offlake",TRUE
+2016-04-15,"Keeler",199,24,20,0,79,11,199,24,"offlake",NA
+2016-04-15,"Lizard Tail",151,24,20,0,NA,NA,151,24,"offlake",NA
+2016-04-15,"North Beach",250,24,20,0,NA,NA,250,24,"offlake",NA
+2016-04-22,"Shell Cut",227,23,153,8,NA,NA,94,15,"onlake",NA
+2016-05-20,"Keeler",175,24,170,17,20,0,25,7,"onlake",NA
+2016-05-20,"Shell Cut",305,24,20,0,NA,NA,305,24,"offlake",NA
+2016-06-15,"Shell Cut",209,24,20,0,NA,NA,209,24,"offlake",NA
+2016-10-15,"Shell Cut",157,24,37,8,NA,NA,139,16,"mixed",NA
+2016-10-16,"Keeler",202,24,192,14,20,0,30,10,"onlake",NA
+2016-10-16,"Lizard Tail",199,24,147,13,NA,NA,72,11,"mixed",NA
+2016-10-16,"Lone Pine",228,24,19,7,NA,NA,229,17,"offlake",NA
+2016-10-16,"Olancha",531,24,20,0,NA,NA,531,24,"offlake",NA
+2016-10-16,"Shell Cut",203,24,133,17,NA,NA,91,7,"mixed",NA
+2016-10-17,"Shell Cut",327,24,31,3,NA,NA,316,21,"offlake",NA
+2016-10-30,"Dirty Socks",171,24,20,0,NA,NA,171,24,"offlake",NA
+2016-10-30,"Shell Cut",214,24,20,0,NA,NA,214,24,"offlake",NA
+2016-11-16,"Keeler",250,24,62,8,195,8,207,16,"offlake",TRUE
+2016-11-16,"Lizard Tail",447,24,39,8,NA,NA,428,16,"offlake",NA
+2016-11-16,"North Beach",285,24,22,5,NA,NA,284,19,"offlake",NA
+2016-11-16,"Olancha",246,24,35,13,NA,NA,232,11,"offlake",NA
+2016-12-02,"Olancha",162,24,155,22,NA,NA,28,2,"onlake",NA
+2016-12-15,"Shell Cut",228,24,23,1,NA,NA,225,23,"offlake",NA
+2017-03-04,"Lizard Tail",204,24,210,14,NA,NA,15,10,"onlake",NA
+2017-03-05,"Dirty Socks",768,24,13,7,NA,NA,775,17,"offlake",NA
+2017-03-05,"Keeler",158,24,162,19,19,1,16,5,"onlake",NA
+2017-03-05,"Lizard Tail",404,24,416,19,NA,NA,9,5,"onlake",NA
+2017-03-05,"Shell Cut",541,24,71,8,NA,NA,490,16,"offlake",NA
+2017-03-18,"Lizard Tail",179,24,180,18,NA,NA,19,6,"onlake",NA
+2017-03-24,"Lizard Tail",184,24,182,10,NA,NA,22,14,"onlake",NA
+2017-03-27,"Dirty Socks",236,24,237,20,NA,NA,19,4,"onlake",NA
+2017-03-27,"Olancha",218,24,222,13,NA,NA,16,11,"onlake",NA
+2017-03-30,"Dirty Socks",248,24,228,16,NA,NA,40,8,"onlake",NA
+2017-03-30,"Keeler",513,24,75,6,412,10,458,18,"offlake",TRUE
+2017-03-30,"Lizard Tail",1016,24,111,4,NA,NA,926,20,"offlake",NA
+2017-03-30,"Mill Site",398,24,352,15,NA,NA,65,9,"onlake",NA
+2017-03-30,"North Beach",556,24,21,3,NA,NA,556,21,"offlake",NA
+2017-03-30,"Olancha",335,24,286,8,NA,NA,69,16,"onlake",NA
+2017-03-30,"Shell Cut",280,24,283,19,NA,NA,17,5,"onlake",NA
+2017-03-31,"Dirty Socks",241,24,241,24,NA,NA,20,0,"onlake",NA
+2017-03-31,"Keeler",1171,24,20,0,1171,24,1171,24,"offlake",TRUE
+2017-03-31,"Lizard Tail",1223,24,20,0,NA,NA,952,23,"offlake",NA
+2017-03-31,"Mill Site",377,24,377,24,NA,NA,20,0,"onlake",NA
+2017-03-31,"North Beach",616,24,20,0,NA,NA,616,24,"offlake",NA
+2017-03-31,"Olancha",811,24,811,24,NA,NA,20,0,"onlake",NA
+2017-03-31,"Shell Cut",168,24,168,24,NA,NA,20,0,"onlake",NA
+2017-04-06,"Dirty Socks",183,24,92,4,NA,NA,111,20,"mixed",NA
+2017-04-06,"Lizard Tail",224,24,224,20,NA,NA,20,4,"onlake",NA
+2017-04-06,"North Beach",186,24,186,24,NA,NA,20,0,"onlake",NA
+2017-04-06,"Shell Cut",171,24,72,5,NA,NA,119,19,"mixed",NA
+2017-04-06,"Stanley",430,24,51,19,NA,NA,399,5,"offlake",NA
+2017-04-07,"Dirty Socks",2165,24,20,0,NA,NA,2165,24,"offlake",NA
+2017-04-07,"Lizard Tail",298,24,273,22,NA,NA,44,2,"onlake",NA
+2017-04-07,"Lone Pine",262,24,202,11,NA,NA,80,13,"onlake",NA
+2017-04-07,"North Beach",219,24,221,22,NA,NA,19,2,"onlake",NA
+2017-04-07,"Shell Cut",785,24,20,0,NA,NA,785,24,"offlake",NA
+2017-04-12,"Dirty Socks",168,24,20,2,NA,NA,168,22,"offlake",NA
+2017-04-13,"Dirty Socks",182,20,30,5,NA,NA,172,15,"offlake",NA
+2017-04-13,"Shell Cut",387,19,19,3,NA,NA,388,16,"offlake",NA
+2017-08-31,"North Beach",154,24,20,11,NA,NA,154,13,"offlake",NA
+2017-09-21,"Shell Cut",230,24,23,8,NA,NA,227,16,"offlake",NA
+2017-10-08,"Keeler",270,24,25,11,266,6,265,13,"offlake",TRUE
+2017-10-08,"Olancha",283,24,282,13,NA,NA,21,11,"onlake",NA
+2017-11-27,"Dirty Socks",200,24,26,14,NA,NA,194,10,"offlake",NA
+2017-11-27,"Keeler",294,24,36,9,280,11,278,15,"offlake",TRUE
+2017-11-27,"Shell Cut",185,24,47,13,NA,NA,158,11,"offlake",NA
+2017-12-20,"Lizard Tail",193,24,145,4,NA,NA,68,20,"mixed",NA
+2017-12-20,"North Beach",173,24,144,6,NA,NA,49,18,"mixed",NA
