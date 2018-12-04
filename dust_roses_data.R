@@ -1,169 +1,136 @@
-library(tidyverse)
-library(lubridate)
-library(sp)
-library(rgdal)
-airsci_loc <- Sys.getenv("R_AIRSCI")
-load_all(airsci_loc)
-path <- "~/code/dust_pic"
-start_date <- as.Date('2016-01-01')
-end_date <- Sys.Date()
 
-#epa_sites <- c('Coso Junction'=1001, 'Olancha'=0021, 'Dirty Socks'=0022, 
-#               'Stanley'=0026, 'Shell Cut'=0025, 'Mill Site'=0030, 
-#               'Keeler'=1003, 'Lizard Tail'=0028, 'North Beach'=0029, 
-#               'Lone Pine'=0004)
-#epa_codes <- c('pm10'=81102, 'ws'=61103, 'wd'=61104)
-#
-#data_files <- list.files("./data", full.names=TRUE)
-#
-#epa_locs <- read.csv("./data/hourly_81102_2016.csv") %>% 
-#    filter(Site.Num %in% epa_sites & State.Code==6 & County.Code==27) %>%
-#    select('site_num'=Site.Num, 'latitude'=Latitude, 'longitude'=Longitude) %>% 
-#    distinct()
-#
-#pm10_files <- data_files[grepl("81102", data_files)]
-#pm10_df <- data.frame()
-#for (fl in pm10_files){
-#    print(fl)
-#    df1 <- read.csv(fl)
-#    names(df1) <- tolower(gsub("[.]", "_", names(df1)))
-#    df2 <- df1 %>% 
-#        filter(site_num %in% epa_sites & state_code==6 & county_code==27) %>%
-#        select(site_num, date_gmt, time_gmt, 'pm10'=sample_measurement)
-#    pm10_df <- rbind(pm10_df, df2)
-#}
-#
-#wind_files <- data_files[grepl("WIND", data_files)]
-#wind_df <- data.frame()
-#for (fl in wind_files){
-#    print(fl)
-#    df1 <- read.csv(fl)
-#    names(df1) <- tolower(gsub("[.]", "_", names(df1)))
-#    df2 <- df1 %>% 
-#        filter(site_num %in% epa_sites & state_code==6 & county_code==27) %>%
-#        select(site_num, date_gmt, time_gmt, 'value'=sample_measurement, 
-#               'code'=parameter_code)
-#    wind_df <- rbind(wind_df, df2)
-#}
-#wind_df[wind_df$code==61103, ]$value <- 0.5144* wind_df[wind_df$code==61103, ]$value
-#wind_df$key <- sapply(wind_df$code, function(x) ifelse(x==61103, 'ws', 'wd'))
-#a <- wind_df %>% select(-code) %>% spread(key, value)
-
-mfile_sites = c('Olancha', 'DirtySox', 'ShellCut', 'Stanley')
-
-mfile_query <- paste0("SELECT datetime, site AS deployment, aspd AS ws, ", 
-                      "dir AS wd, teom AS pm10 FROM archive.mfile_data ",
-                      "WHERE datetime::date > '", start_date, "'::date ",
-                      "AND site IN ('", paste(mfile_sites, collapse="', '"), "');")
-mfile_df <- query_db("owenslake", mfile_query)
-
-teom_old_query <- paste0("SELECT datetime, deployment, pm10_std_avg AS pm10 ", 
-                        "FROM teom.avg_1hour_validated ", 
-                        "WHERE datetime::date > '", start_date, "'::date ",
-                        "AND deployment IN ('Haiwee', 'T2-1') ",
-                        "AND NOT invalid")
-teom_old_df <- query_db("owenslake", teom_old_query)
-
-teom_new_query <- paste0("SELECT datetime, deployment, pm10_1hour_stp AS pm10 ", 
-                        "FROM teom.hourly_validated ", 
-                        "WHERE datetime::date > '", max(teom_old_df$datetime), "'::date ",
-                        "AND deployment IN ('Haiwee', 'T2-1') ",
-                        "AND NOT invalid")
-teom_new_df <- query_db("owenslake", teom_new_query)
-
-met_query <- paste0("SELECT m.datetime, i.deployment, m.ws_wvc AS ws, ",
-                    "m.wd_wvc AS wd FROM teom.teom_analog_1hour m "
-                    "JOIN instruments.deployments i ",
-                    "ON i.deployment_id=m.deployment_id "
-                    "WHERE datetime::date > '", start_date, "'::date ",
-                    "AND deployment IN ('Haiwee', 'T2-1');")
-met_df <- query_df("owenslake", met_query)
-
-
-
-
-query1 <- paste0("SELECT * FROM teom.avg_1hour_validated_haiwee ",
-                 "WHERE NOT invalid")
-df1 <- query_db("owenslake", query1) %>%
-    select(deployment, datetime, 'pm10'=pm10_std_avg)
-
-query2 <- paste0("SELECT * FROM teom.hourly_validated_haiwee ", 
-                 "WHERE NOT invalid")
-df2 <- query_db("owenslake", query2) %>% 
-    select(deployment, datetime, 'pm10'=pm10_1hour_stp)
-
-df3 <- rbind(df1, df2)
-
-query_met <- paste0("SELECT i.deployment, m.datetime, m.ws_2m AS ws, m.wd_6m ", 
-                    "FROM met.met_1hour m JOIN instruments.deployments i ",
-                    "ON m.deployment_id=i.deployment_id ", 
-                    "WHERE i.deployment='Haiwee';")
-met_df <- query_db("owenslake", query_met)
-
-mfile_sites = c('Olancha'='Olancha', 'Dirty Socks'='DirtySox', 
-                'Stanley'='Stanley', 'Shell Cut'='ShellCut')
-query4 <- paste0("SELECT * FROM archive.mfile_data ",
-                 "WHERE site in (", 
-                 paste0(names(mfile_sites), collapse="', '"), "');")
-df4 <- query_db("owenslake", query4) %>%
-    select('deployment'=site, datetime, 'pm10'=teom, 'ws'=aspd, 'wd'=dir)
-
-
-df1$site_num <- as.integer(df1$site_num)
-df2 <- select(df1, site_num, aqs_parameter_desc, 
-              date_gmt, hour_gmt='24_hour_gmt', sample_measurement, 
-              units_of_measure, sample_duration, sample_frequency)
-df3 <- filter(df2, site_num %in% epa_sites)
-query1 <- paste0("SELECT DISTINCT i.deployment, ",
-                 "st_y(st_transform(i.geom, 26911)) AS y, ",
-                 "st_x(st_transform(i.geom, 26911)) AS x ",
-                 "FROM instruments.deployments i ",
-                 "WHERE i.deployment IN ('", 
-                 paste0(names(epa_sites), collapse="', '"), "');")
-xy = query_db("owenslake", query1)
-xy = rbind(xy, data.frame('deployment'='Coso Junction', 'y'=3989840, 
-                          'x'=414978))
-xy$site_num = c()
-for (i in c(1:nrow(xy))){
-    xy$site_num[i] = epa_sites[xy$deployment[i]]
+pull_site_locations <- function(teom_sites){
+    query2 <- paste0("SELECT DISTINCT i.deployment, ",
+                     "st_y(st_transform(i.geom, 26911)) AS y, ",
+                     "st_x(st_transform(i.geom, 26911)) AS x ",
+                     "FROM instruments.deployments i ",
+                     "WHERE i.deployment IN ('",
+                     paste0(teom_sites, collapse="', '"), "');")
+    site_locs <- query_db("owenslake", query2)
+    site_locs$deployment <- sapply(site_locs$deployment, 
+                                   function(x) names(teom_sites)[which(teom_sites==x)])
+    return(site_locs)
 }
-df4 <- left_join(df3, xy, by="site_num") %>%
-    mutate(datetime = ymd_hms(paste(date_gmt, hour_gmt))) %>%
-    select(deployment, y, x, datetime, pm10=sample_measurement) %>%
-    filter(datetime %m-% seconds(1) >= start_date, 
-           datetime %m-% seconds(1) < end_date)
 
-airsci_sites <- c('T2-1', 'Haiwee')
-query2 <- paste0("SELECT DISTINCT i.deployment, ",
-                 "st_y(st_transform(i.geom, 26911)) AS y, ",
-                 "st_x(st_transform(i.geom, 26911)) AS x, ",
-                 "t.datetime, t.pm10_1hour_stp AS pm10 ", 
-                 "FROM teom.teom_30min t ",
-                 "JOIN instruments.deployments i ",
-                 "ON t.deployment_id=i.deployment_ID ",
-                 "WHERE i.deployment IN ('", 
-                 paste0(airsci_sites, collapse="', '"), "') ", 
-                 "AND (t.datetime - '1 second'::interval)::date ",
-                 "BETWEEN '", start_date, "'::date AND '", end_date, "'::date ", 
-                 "AND EXTRACT(MINUTE FROM t.datetime)=0;")
-teom_30min <- query_db("owenslake", query2)
-teom_30min$datetime <- teom_30min$datetime %m+% hours(8)
-tz(teom_30min$datetime) <- 'UTC'
+pull_mfile_data <- function(yr, teom_sites){
+    start_str <- paste0(start_date, " 01:00:00")
+    end_str <- paste0(end_date %m+% days(1), " 00:00:00")
+    print(paste0(start_str, " through ", end_str))
 
-backfill_end <- min(teom_30min$datetime, na.rm=T) %m-% hours(9)
-query3 <- paste0("SELECT DISTINCT i.deployment, ",
-                 "st_y(st_transform(i.geom, 26911)) AS y, ",
-                 "st_x(st_transform(i.geom, 26911)) AS x, ",
-                 "t.datetime, t.pm10_std AS pm10 ", 
-                 "FROM teom.teom_1min t ",
-                 "JOIN instruments.deployments i ",
-                 "ON t.deployment_id=i.deployment_ID ",
-                 "WHERE i.deployment IN ('", 
-                 paste0(airsci_sites, collapse="', '"), "') ", 
-                 "AND (t.datetime - '1 second'::interval)::date ",
-                 "> '", start_date, "'::date ",
-                 "AND t.datetime < '", backfill_end, "';") 
-teom_1min <- query_db("owenslake", query3)
-teom_1min$datetime <- teom_1min$datetime %m+% hours(8)
-tz(teom_1min$datetime) <- 'UTC'
+    print("Getting mfile data...")
+    mfile_names <- c("LP"="LonePine", "KE"="Keeler", "NB"="NorthBch", 
+                     "LT"="LizardTl", "MS"="MillSite", "SC"="ShellCut", 
+                     "DS"="DirtySox", "OL"="Olancha", "ST"="Stanley")
+    mfile_sites <- names(teom_sites)[names(teom_sites) %in% names(mfile_names)]
+    mfile_query <- paste0("SELECT datetime, site AS deployment, aspd AS ws, ", 
+                          "dir AS wd, teom AS pm10 FROM archive.mfile_data ",
+                          "WHERE EXTRACT(YEAR FROM datetime - '1 second'::interval)", 
+                          "=", yr, " AND site IN ('", 
+                          paste(mfile_names[mfile_sites], collapse="', '"), "');")
+    mfile_df <- query_db("owenslake", mfile_query)
+    mfile_df$deployment <- sapply(mfile_df$deployment, 
+                                  function(x) names(mfile_names)[which(mfile_names==x)])
+    return(mfile_df)
+}
+
+pull_teom_data <- function(yr, teom_sites){
+    print("Getting LADWP TEOM data...")
+    dwp_sites <- teom_sites[names(teom_sites) %in% c('HW')]
+    # get teom data from 1 hour average view of old 1-min data if needed
+    teom_old_query <- paste0("SELECT datetime, deployment, pm10_std_avg AS pm10 ", 
+                            "FROM teom.avg_1hour_validated ", 
+                            "WHERE EXTRACT(YEAR FROM datetime - '1 second'::interval)", 
+                            "=", yr, " AND deployment IN ", 
+                            "('", paste(dwp_sites, collapse="', '"), "') ",
+                            "AND NOT invalid")
+    teom_new_query <- paste0("SELECT datetime, deployment, pm10_1hour_stp AS pm10 ", 
+                            "FROM teom.hourly_validated ", 
+                            "WHERE EXTRACT(YEAR FROM datetime - '1 second'::interval)", 
+                            "=", yr, " AND deployment IN ", 
+                            "('", paste(dwp_sites, collapse="', '"), "') ",
+                            "AND NOT invalid")
+    teom_df <- data.frame(datetime=c(), deployment=c(), pm10=c(), ws=c(), wd=c())
+    if (yr <= 2017){
+        teom_old_df <- query_db("owenslake", teom_old_query)
+        teom_df <- rbind(teom_df, teom_old_df)
+    } 
+    if (yr >= 2017){
+        teom_new_df <- query_db("owenslake", teom_new_query)
+        teom_df <- rbind(teom_df, teom_new_df)
+    }
+    teom_met_query <- paste0("SELECT m.datetime, i.deployment, m.ws_wvc AS ws, ",
+                        "m.wd_wvc AS wd FROM teom.teom_analog_1hour m ", 
+                        "JOIN instruments.deployments i ",
+                        "ON i.deployment_id=m.deployment_id ", 
+                        "WHERE EXTRACT(YEAR FROM datetime - '1 second'::interval)", 
+                        "=", yr, " AND deployment IN ", 
+                        "('", paste(dwp_sites, collapse="', '"), "');")
+    teom_met <- query_db("owenslake", teom_met_query)
+    teom_df <- left_join(teom_df, teom_met, by=c("datetime", "deployment"))
+    teom_df$deployment <- sapply(teom_df$deployment, 
+                                  function(x) names(dwp_sites)[which(dwp_sites==x)])
+    return(teom_df)
+}
+
+load_epa_data <- function(teom_sites){
+    print("Getting EPA site data...")
+    epa_codes <- c('81102'='pm10', '61101'='ws_s', '61102'='wd_s', 
+                   '61103'='ws_r', '61104'='wd_r')
+    epa_xwalk <- c('NB'='0029', 'LT'='0028', 'KE'='1003', 'MS'='0030', 'SC'='0025', 
+                   'DS'='0022', 'ST'='0026', 'CJ'='1001', 'OL'='0021')
+    epa_sites <- names(teom_sites)[names(teom_sites) %in% names(epa_xwalk)]
+    df1 <- read_csv("~/code/dust_pic/data/epa.csv", col_types="cDticdc")
+    names(df1) <- c('deployment', 'date', 'hour', 'code', 'desc', 'value', 'units')
+    df2 <- filter(df1, deployment %in% epa_xwalk[epa_sites])
+    df2$deployment <- sapply(df2$deployment, 
+                              function(x) names(epa_xwalk)[which(epa_xwalk==x)])
+    df2$datetime_utc <- as.POSIXct(paste0(df2$date, " ", df2$hour), tz='UTC', 
+                                 format="%Y-%m-%d %H:%M")
+    df2$datetime <- sapply(df2$datetime_utc, rezone)
+    df2$datetime <- as.POSIXct(df2$datetime, origin="1970-01-01")
+    df2$date <- date(df2$datetime - 1)
+    df2$year <- year(df2$datetime - 1)
+
+    df3 <- df2 %>% 
+        select(datetime, deployment, code, value) %>%
+        spread(code, value)
+    names(df3) <- sapply(names(df3), function(x) ifelse(x %in% names(epa_codes), 
+                                                        epa_codes[x], x))
+    if ('wd_r' %in% names(df3) & 'wd_s' %in% names(df3)){
+        df3$wd <- coalesce(df3$wd_r, df3$wd_s)
+        df3 <- select(df3, -wd_r, -wd_s)
+    } else{
+        names(df3)[which(grepl('wd', names(df3)))] <- 'wd'
+    }
+    if ('ws_r' %in% names(df3) & 'ws_s' %in% names(df3)){
+        df3$ws <- coalesce(df3$ws_r, df3$ws_s)
+        df3 <- select(df3, -ws_r, -ws_s)
+    } else{
+        names(df3)[which(grepl('ws', names(df3)))] <- 'ws'
+    }
+    return(df3)
+}
+
+pull_sand_flux <- function(d){
+    query1 <- 
+        paste0("SELECT sens.datetime, ic.deployment AS csc, ", 
+           "CASE ", 
+               "WHEN csc.sumpc_total > 0 ", 
+               "THEN (sens.sumpc / csc.sumpc_total) * ", 
+               "(COALESCE(csc.dwp_mass, csc.district_mass) / 1.2) ",
+               "ELSE 0 ",
+           "END AS sand_flux, ", 
+           "flags.field_is_invalid(csc.sensit_deployment_id, 90, sens.datetime) AS invalid ",
+           "FROM sensit.sensit_5min sens LEFT JOIN sandcatch.csc_summary csc ",
+           "ON csc.sensit_deployment_id = sens.deployment_id ", 
+           "JOIN instruments.deployments ic ",
+           "ON csc.csc_deployment_id=ic.deployment_id ",
+           "WHERE sens.datetime > csc.start_datetime ", 
+           "AND sens.datetime <= csc.collection_datetime ", 
+           "AND COALESCE(csc.dwp_mass, csc.district_mass) IS NOT NULL ",
+           "AND (sens.datetime - '1 second'::interval)::date='", d, "'::date;")
+    a <- query_db("owenslake", query1)
+    attributes(a$datetime)$tzone <- 'America/Los_Angeles'
+    return(a)
+}
 

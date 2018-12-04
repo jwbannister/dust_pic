@@ -1,3 +1,7 @@
 *.xlsx
 output/*
 data/*
+*.swp
+.DS*
+pdfs/*
+*.pdf

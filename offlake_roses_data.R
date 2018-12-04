@@ -3,7 +3,7 @@ library(lubridate)
 airsci_loc <- Sys.getenv("R_AIRSCI")
 load_all(airsci_loc)
 # pull site locations from database
-path <- "~/code/misc/offlake_history/"
+path <- "~/code/dust_pic/"
 mfile_sites <- c("LP"="LonePine", "KE"="Keeler", "NB"="NorthBch", 
                  "LT"="LizardTl", "MS"="MillSite", "SC"="ShellCut", 
                  "DS"="DirtySox", "OL"="Olancha", "ST"="Stanley")
@@ -22,7 +22,7 @@ site_labels$abrv <- sapply(site_labels$deployment, function(x)
 site_labels$site <- sapply(site_labels$abrv, function(x) mfile_sites[x])
 
 # read data from QC'd files provided by Maarten
-df_teom <- openxlsx::read.xlsx(paste0(path, 
+df_teom <- openxlsx::read.xlsx(paste0(path, "data/",
                                       "TEOM_Model_00-17_Update_121117.xlsx"), 
                                sheet=2, startRow=5, colNames=T)
 df_teom <- df_teom[ , c(2:13, 18)]
@@ -32,7 +32,7 @@ gather_teom$date <- as.Date(gather_teom$date, origin='1899-12-30')
 # Stanley sites used to be called something else
 gather_teom[gather_teom$abrv=='AP', ]$abrv <- 'ST'
 
-df_met <- openxlsx::read.xlsx(paste0(path, 
+df_met <- openxlsx::read.xlsx(paste0(path, "data/",
                                       "TEOM_Model_00-17_Update_121117.xlsx"), 
                                sheet=4, startRow=5, colNames=T)
 df_met <- df_met[ , 2:29]

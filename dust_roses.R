@@ -4,10 +4,47 @@ library(lubridate)
 library(ggplot2)
 library(RColorBrewer)
 library(grid)
+library(ggmap)
 airsci_loc <- Sys.getenv("R_AIRSCI")
 load_all(airsci_loc)
-path <- "~/code/misc/offlake_history/"
-source(paste0(path, "/offlake_roses_data.R"))
+path <- "~/code/dust_pic"
+source(paste0(path, "/dust_roses_data.R"))
+source(paste0(path, "/dust_roses_functions.R"))
+
+available_sites <- c('DS'='Dirty Socks', 'SC'='Shell Cut', 'ST'='Stanley', 
+                     'NB'='North Beach', 'LT'='Lizard Tail', 'OL'='Olancha', 
+                     'MS'='Mill Site', 'LP'='Lone Pine', 'KE'='Keeler', 
+                     'HW'='Haiwee', 'CJ'='CoJu-696') 
+map_areas <- list('South'=available_sites[c('DS', 'SC', 'ST', 'OL', 'HW', 'CJ')],
+                  'Shoreline'=available_sites[c('DS', 'SC', 'ST', 'NB', 'LT',
+                                                'OL', 'MS', 'KS')])
+start_year <- 2014
+end_year <- 2014
+refresh_data=TRUE
+map_view <- 'South' #South or Shoreline
+
+site_list <- map_areas[[map_view]]
+site_locs <- pull_site_locations(site_list)
+
+refresh_data <-  FALSE
+if (refresh_data){
+    for (i in seq(start_year, end_year, 1)){
+        mfile_df <- pull_mfile_data(i, site_list)
+        teom_df <- pull_teom_data(i, site_list)
+        epa_df <- load_epa_data(site_list)
+        dfx <- rbind(mfile_df, teom_d, epa_df)
+        if (i==start_year){
+            df1 <- dfx
+        } else{
+            df1 <- rbind(df1, dfx)
+        }
+    }
+    save(df1, file=paste0(path, "/dust_pic_data.RData"))
+} else{
+    print("Using previously stored data...")
+    load(paste0(path, "/dust_pic_data.RData"))
+}
+
 onlake_dir <- list('LP'=c(126, 176), 
                    'KE'=c(151, 296), 
                    'FR'=c(224, 345), 
@@ -17,172 +54,106 @@ onlake_dir <- list('LP'=c(126, 176),
                    'ST'=c(349, 230), 
                    'NB'=c(55, 250), 
                    'LT'=c(128, 288), 
-                   'MS'=c(157, 333)) 
-
-dunes_dir <- c(296, 337)
-
-angle_between <- function(angle_vec, angle){
-    if (angle_vec[1]<angle_vec[2]){
-        return(between(angle, angle_vec[1], angle_vec[2]))
-    } else{
-        return(between(angle, angle_vec[1], 360) |
-               between(angle, 0, angle_vec[2]))
-    }
-}
-
-df1 <- mfile_df %>% rowwise() %>%
-    mutate(onlake=angle_between(onlake_dir[[abrv]], wd),
-           dunes=angle_between(dunes_dir, wd) & deployment=='Keeler') %>%
+                   'MS'=c(157, 333),
+                   'T2'=c(0, 360), 
+                   'HW'=c(344, 17), 
+                   'CJ'=c(347, 12))
+df2 <- df1 %>% rowwise() %>%
+    mutate(onlake=angle_between(onlake_dir[[deployment]], wd)) %>%
     ungroup()
 
-daily_sum <- df1 %>% group_by(date, deployment) %>%
-    do(pm10_24=round(sum(.$teom, na.rm=T)/sum(!is.na(.$teom)), 0), 
-              n=sum(!is.na(.$teom)), 
-              pm10_onlake=round(sum(filter(., onlake)$teom, na.rm=T)/
-                  sum(!is.na(filter(., onlake)$teom)), 0), 
-              n_onlake=sum(!is.na(filter(., onlake)$teom)),
-              pm10_dunes=round(sum(filter(., dunes)$teom, na.rm=T)/
-                  sum(!is.na(filter(., dunes)$teom)), 0), 
-              n_dunes=sum(!is.na(filter(., dunes)$teom)),
-              pm10_offlake=round(sum(filter(., !onlake)$teom, na.rm=T)/
-                  sum(!is.na(filter(., !onlake)$teom)), 0), 
-              n_offlake=sum(!is.na(filter(., !onlake)$teom)))
-for (i in 3:10){
-    daily_sum[ , i] <- unlist(daily_sum[ , i])
+check_days <- df2 %>% group_by(date, deployment) %>% 
+    summarize(n=length(date)) %>% arrange(desc(n))
+
+daily_sum <- df2 %>% group_by(date, deployment) %>%
+    do(pm10_24=avg_pm10(.$pm10)[['avg_pm10']], n=avg_pm10(.$pm10)[['n']], 
+              pm10_onlake=avg_pm10(filter(., onlake)$pm10)[['avg_pm10']], 
+              n_onlake=avg_pm10(filter(., onlake)$pm10)[['n']], 
+              pm10_offlake=avg_pm10(filter(., !onlake)$pm10)[['avg_pm10']], 
+              n_offlake=avg_pm10(filter(., !onlake)$pm10)[['n']]) %>%
+    mutate(pm10_24=unlist(pm10_24), n=unlist(n), 
+           pm10_onlake=unlist(pm10_onlake), n_onlake=unlist(n_onlake), 
+           pm10_offlake=unlist(pm10_offlake), n_offlake=unlist(n_offlake))
+daily_sum$flag.color <- if_else(daily_sum$pm10_24>150, "red", "black") 
+
+if (map_view=='South'){
+    exceeds <- filter(daily_sum, pm10_24>=150 & deployment %in% c('OL', 'HW', 'CJ'))
+} else if (map_view=='Shoreline'){
+    exceeds <- filter(daily_sum, pm10_24>=150 & !(deployment %in% c('HW', 'CJ')))
 }
-exceeds <- filter(daily_sum, pm10_24>=150)
-exceeds$class <- rep(NA, nrow(exceeds))
-exceeds$dunes <- rep(NA, nrow(exceeds))
-for (j in 1:nrow(exceeds)){
-    if (exceeds$n_offlake[j]==0) exceeds$pm10_offlake[j] <- 0
-    if (exceeds$n_onlake[j]==0) exceeds$pm10_onlake[j] <- 0
-    if (exceeds$deployment[j]!='Keeler'){
-        exceeds$n_dunes[j] <- NA
-        exceeds$pm10_dunes[j] <- NA
-    } else{
-        if (exceeds$n_dunes[j]==0) exceeds$pm10_dunes[j] <- 0
-        if (exceeds$pm10_dunes[j]>=150) exceeds$dunes[j] <- TRUE
-        exceeds$pm10_dunes[j] <- round(((exceeds$pm10_dunes[j]*exceeds$n_dunes[j])+
-                                  (20*(24-exceeds$n_dunes[j])))/24, 0)
-    }
-    # calculate pm10 average with District backfill procedure
-    exceeds$pm10_24[j] <- round(((exceeds$pm10_24[j]*exceeds$n[j])+
-                           (20*(24-exceeds$n[j])))/24, 0)
-    exceeds$pm10_onlake[j] <- round(((exceeds$pm10_onlake[j]*exceeds$n_onlake[j])+
-                              (20*(24-exceeds$n_onlake[j])))/24, 0)
-    exceeds$pm10_offlake[j] <- round(((exceeds$pm10_offlake[j]*exceeds$n_offlake[j])+
-                               (20*(24-exceeds$n_offlake[j])))/24, 0)
-    if (exceeds$pm10_offlake[j]>=150 & exceeds$pm10_onlake[j]>=150){
-        exceeds$class[j] <- "mixed" 
-    } else if (exceeds$pm10_offlake[j]>=150){
-         exceeds$class[j] <- "offlake"
-    } else if (exceeds$pm10_onlake[j]>=150){
-         exceeds$class[j] <- "onlake"
-    } else{
-        exceeds$class[j] <- "mixed" 
-    }
-}
-
-days <- exceeds %>% ungroup() %>% mutate(yr = year(date)) %>%
-    group_by(yr) %>%
-    summarize(exceedance_days = length(pm10_24))
-
-write.csv(days, 
-          file=paste0(path, "exceedance_days_2015-present.csv"), row.names=F)
-write.csv(exceeds, 
-          file=paste0(path, "site_exceedances_2015-present.csv"), row.names=F)
-
-exceed_class <- exceeds %>% group_by(year(date)) %>%
-    summarize(onlake=sum(class=='onlake'),
-              offlake=sum(class=='offlake'), 
-              mixed=sum(class=='mixed'), 
-              total=length(pm10_24)) 
-exceed_sum <- t(exceed_class)
-colnames(exceed_sum) <- exceed_sum[1, ]
-exceed_sum <- exceed_sum[-1, ]
     
-keeler_dunes <- exceeds %>% filter(deployment=='Keeler') %>%
-    group_by(year(date)) %>%
-    summarize(total=length(pm10_24), 
-              dunes=sum(dunes, na.rm=T))
-exceed_sum <- rbind(exceed_sum, t(keeler_dunes)[3, ])
-rownames(exceed_sum)[5] <- 'keeler_dunes'
-write.csv(exceed_sum, file=paste0(path, "exceedance_summary_2015-present.csv"))
-
-owens <- pull_all_polygons()
-shoreline <- pull_shoreline_polygon()
-
 exceed_days <- sort(unique(exceeds$date))
 valueseq <- c(10, 50, 100, 150)
-legend.data <- mfile_df %>% filter(deployment==mfile_df$deployment[1])
-legend.data$teom[1] <- NA
+legend.data <- df2 %>% filter(deployment==df2$deployment[1])
+legend.data$pm10[1] <- NA
 legend.plot <- legend.data %>%
-    plot_rose(., value='teom', dir='wd', valueseq=valueseq,
+    plot_rose(., value='pm10', dir='wd', valueseq=valueseq,
               legend.title=bquote('P'*M[10]~'('*mu*'g/'*m^3*')'), 
               reverse.bars=T)
 legnd <- g_legend(legend.plot)
 
-p1 <- ggplot(data=shoreline, mapping=aes(x=x, y=y)) +
-    geom_path(data=owens, mapping=aes(group=area_name), color='grey') +
-    geom_path(mapping=aes(group=area_name)) +
-#    geom_point(data=site_labels, mapping=aes(x=x, y=y)) +
-    coord_equal()
-info <- ggplot_build(p1)
-xrange <- info[[2]]$panel_ranges[[1]]$x.range
-yrange <- info[[2]]$panel_ranges[[1]]$y.range
-p2 <- p1 +
-    xlim(xrange[1] - 1000, xrange[2] + 1000) +
-    ylim(yrange[1] - 1000, yrange[2] + 1000) +
-    annotation_custom(legnd,
-                      xmin=xrange[2] - 4000,
-                      xmax=xrange[2],
-                      ymin=yrange[2] - 8000,
-                      ymax=yrange[2]) +
-theme(axis.line=element_blank(),
-      axis.text.x=element_blank(),
-      axis.text.y=element_blank(),
-      axis.ticks=element_blank(),
-      axis.title.x=element_blank(),
-      axis.title.y=element_blank(),
-#      legend.position="none",
-      panel.background=element_blank(),
-      panel.border=element_blank(),
-      panel.grid.major=element_blank(),
-      panel.grid.minor=element_blank(),
-      plot.background=element_blank(),
-      plot.title=element_text(size=12))
+shoreline <- pull_shoreline_polygon()
 
-daily_sum$flag.color <- if_else(daily_sum$pm10_24>150, "red", "black") 
+if (map_view=='Shoreline'){
+    plot_range <- c('xmin'=404866, 'xmax'=426166, 'ymin'=4015506, 'ymax'=4052866)
+    legnd_range <- c(plot_range[2]-4000, plot_range[2], plot_range[4]-8000, plot_range[4])
+    logo_range <- c(plot_range[2]-5000, plot_range[2], plot_range[3], plot_range[3]+5000)
+    text_range <- c(plot_range[2]-4000, plot_range[2], plot_range[4], plot_range[4]+2000)
+} else if (map_view=='South'){
+    plot_range <- c('xmin'=400866, 'xmax'=430166, 'ymin'=3988000, 'ymax'=4036000)
+    legnd_range <- c(plot_range[2]-4000, plot_range[2], plot_range[3], plot_range[3]+8000)
+    logo_range <- c(plot_range[1], plot_range[1]+5000, plot_range[3]-1000, plot_range[3]+3000)
+    text_range <- c(plot_range[2]-7000, plot_range[2], plot_range[3]-3000, plot_range[3])
+}
+
+photo_back <- FALSE
+if (photo_back){
+    google_key = Sys.getenv("OWENS_MAPS_KEY")
+    background <- photo_background(plot_range[1], plot_range[2], plot_range[3], 
+                                   plot_range[4], zone='11N', key=google_key)
+    p1 <- background + 
+        geom_path(data=shoreline, mapping=aes(x=x, y=y, group=area_name))
+} else{
+    p1 <- ggplot(data=shoreline, mapping=aes(x=x, y=y)) +
+        geom_path(mapping=aes(group=area_name))
+}
+p1 <- p1 +
+    xlim(plot_range[1], plot_range[2]) +
+    ylim(plot_range[3], plot_range[4]) +
+    coord_equal() +
+    theme(axis.line=element_blank(),
+          axis.text=element_blank(),
+          axis.ticks=element_blank(),
+          axis.title=element_blank(),
+          panel.background=element_blank(),
+          panel.grid.major=element_blank(),
+          panel.grid.minor=element_blank(),
+          plot.background=element_blank(),
+          plot.title=element_text(size=12, hjust=0.5),
+          plot.subtitle=element_text(hjust=0.5),
+          panel.border=element_rect(color="black", fill="transparent"))
+p2 <- p1 +
+    annotation_custom(logo_grob, xmin=logo_range[1], xmax=logo_range[2],
+                      ymin=logo_range[3], ymax=logo_range[4]) +
+    annotation_custom(legnd, xmin=legnd_range[1], xmax=legnd_range[2],
+                      ymin=legnd_range[3], ymax=legnd_range[4]) +
+    annotation_custom(grid::textGrob(expression(paste("Site Label = 24-hour P", M[10])),
+                                                gp=gpar(fontsize=10)),
+                          xmin=text_range[1], xmax=text_range[2],
+                          ymin=text_range[3], ymax=text_range[4])
 
 for (dt in as.character(exceed_days)){
     print(dt)
-    site_table <- filter(exceeds, date==dt) %>% 
-        select(deployment, pm10_onlake, pm10_offlake, pm10_dunes)
-    names(site_table) <- c("Site", "Onlake", "Offlake", "Keeler Dunes")
-    site_table_grob <- gridExtra::tableGrob(site_table, rows=NULL, 
-                                   theme=gridExtra::ttheme_minimal(base_size=6))
-    roses <- list(grob=c(), center=c())
-    for (j in site_table$Site){
-        p_rose <- mfile_df %>% 
-            filter(deployment==j & !is.na(teom) & date==dt) %>%
-            plot_rose_image_only(., value='teom', dir='wd',
-                                 valueseq=valueseq, reverse.bars=T)
-        fl <- tempfile()
-        png(filename=fl, bg="transparent")
-        print(p_rose)
-        dev.off()
-        ras <- grid::rasterGrob(png::readPNG(fl), interpolate=TRUE)
-        roses$grob[[j]] <- ras
-        roses$center[[j]] <- c(filter(site_labels, deployment==j)$x,
-                               filter(site_labels, deployment==j)$y)
-    }
-
+    roses <- create_roses(df2, dt)
     buffer <- 4000
-    p3 <- p2
+    p3 <- p2 +
+        ggtitle(substitute(paste("Hourly P",  M[10], " Roses for ", d),
+                           list(d=format(as.Date(dt), "%m-%d-%Y"))),
+                subtitle="CONFIDENTIAL ATTORNEY-CLIENT WORK PRODUCT")
     for (m in names(roses$grob)){
         label_data <- daily_sum %>% 
             filter(deployment==m & date==dt) %>%
-            left_join(site_labels, by="deployment")
+            left_join(site_locs, by="deployment")
         p3 <- p3 +
             annotation_custom(roses$grob[[m]],
                               xmin=roses$center[[m]][1] - buffer,
@@ -192,44 +163,12 @@ for (dt in as.character(exceed_days)){
             geom_label(data=label_data,
                        mapping=aes(x=x, y=y, label=pm10_24),
                        color=label_data$flag.color, size=3, 
-                       label.padding=unit(0.15, "lines")) +
-            geom_text(data=label_data,
-                      mapping=aes(x=x, y=y, label=deployment),
-                      nudge_y=-800, size=3)
+                       label.padding=unit(0.15, "lines"))
     }
-
-    p4 <- p3 +
-        ggtitle(substitute(paste("Hourly P",  M[10], " Roses for ", d),
-                           list(d=format(as.Date(dt), "%m-%d-%Y"))),
-                subtitle="CONFIDENTIAL ATTORNEY-CLIENT WORK PRODUCT") +
-        annotation_custom(grid::textGrob(
-                             expression(
-                                paste("Site Label = 24-hour P", M[10])),
-                                         gp=gpar(fontsize=10)),
-                          xmin=xrange[2] - 4000,
-                          xmax=xrange[2],
-                          ymin=yrange[2],
-                          ymax=yrange[2] + 2000) +
-        annotation_custom(logo_grob,
-                          xmin=xrange[2] - 5000,
-                          xmax=xrange[2],
-                          ymin=yrange[1],
-                          ymax=yrange[1] + 5000) +
-        annotation_custom(site_table_grob, 
-                          xmin=xrange[2] - 5500,
-                          xmax=xrange[2],
-                          ymin=yrange[1] + 5000,
-                          ymax=yrange[1] + 6000 + nrow(site_table)*1000) +
-        theme(plot.title=element_text(hjust=0.5),
-              plot.subtitle=element_text(hjust=0.5),
-              panel.border=element_rect(color="black", fill="transparent"))
-
-    fl <- paste0(path, "pdfs/", format(as.Date(dt), "%Y-%m-%d"),
+    fl <- paste0(path, "/pdfs/", format(as.Date(dt), "%Y-%m-%d"),
                  "_shoreline_exceedance.pdf")
     pdf(file=fl, width=8, height=10.5, paper="letter")
-    print(p4)
+    print(p3)
     dev.off()
 }
-system(paste0("pdfunite ", path, "pdfs/*.pdf ", path, 
-              "2015-present_shoreline_exceedances.pdf"))
 
