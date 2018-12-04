@@ -8,7 +8,6 @@ library(ggmap)
 airsci_loc <- Sys.getenv("R_AIRSCI")
 load_all(airsci_loc)
 path <- "~/code/dust_pic"
-source(paste0(path, "/dust_roses_data.R"))
 source(paste0(path, "/dust_roses_functions.R"))
 
 available_sites <- c('DS'='Dirty Socks', 'SC'='Shell Cut', 'ST'='Stanley', 
@@ -18,27 +17,19 @@ available_sites <- c('DS'='Dirty Socks', 'SC'='Shell Cut', 'ST'='Stanley',
 map_areas <- list('South'=available_sites[c('DS', 'SC', 'ST', 'OL', 'HW', 'CJ')],
                   'Shoreline'=available_sites[c('DS', 'SC', 'ST', 'NB', 'LT',
                                                 'OL', 'MS', 'KS')])
-start_year <- 2014
-end_year <- 2014
-refresh_data=TRUE
+start_date <- as.Date("2014-01-01")
+end_date <- as.Date("2014-12-31")
+refresh_data <- TRUE
 map_view <- 'South' #South or Shoreline
 
 site_list <- map_areas[[map_view]]
 site_locs <- pull_site_locations(site_list)
 
-refresh_data <-  FALSE
 if (refresh_data){
-    for (i in seq(start_year, end_year, 1)){
-        mfile_df <- pull_mfile_data(i, site_list)
-        teom_df <- pull_teom_data(i, site_list)
-        epa_df <- load_epa_data(site_list)
-        dfx <- rbind(mfile_df, teom_d, epa_df)
-        if (i==start_year){
-            df1 <- dfx
-        } else{
-            df1 <- rbind(df1, dfx)
-        }
-    }
+    mfile_df <- pull_mfile_data(start_date, end_date, site_list)
+    teom_df <- pull_teom_data(i, site_list)
+    epa_df <- load_epa_data(site_list)
+    dfx <- rbind(mfile_df, teom_d, epa_df)
     save(df1, file=paste0(path, "/dust_pic_data.RData"))
 } else{
     print("Using previously stored data...")
