@@ -61,8 +61,12 @@ pull_site_locations <- function(teom_sites){
                      "WHERE i.deployment IN ('",
                      paste0(teom_sites, collapse="', '"), "');")
     site_locs <- query_db("owenslake", query2)
+    site_locs$name <- site_locs$deployment
     site_locs$deployment <- sapply(site_locs$deployment, 
                                    function(x) names(teom_sites)[which(teom_sites==x)])
+    site_locs$name <- sapply(site_locs$name, function(x) ifelse(x=='CoJu-696', 
+                                                                'Coso Junction', 
+                                                                x))
     return(site_locs)
 }
 
@@ -87,28 +91,34 @@ pull_mfile_data <- function(start_date, end_date, teom_sites){
     return(mfile_df)
 }
 
-pull_teom_data <- function(yr, teom_sites){
+pull_teom_data <- function( start_date, end_date, teom_sites){
+    start_str <- paste0(start_date, " 01:00:00")
+    end_str <- paste0(end_date %m+% days(1), " 00:00:00")
     print("Getting LADWP TEOM data...")
     dwp_sites <- teom_sites[names(teom_sites) %in% c('HW')]
     # get teom data from 1 hour average view of old 1-min data if needed
     teom_old_query <- paste0("SELECT datetime, deployment, pm10_std_avg AS pm10 ", 
                             "FROM teom.avg_1hour_validated ", 
-                            "WHERE EXTRACT(YEAR FROM datetime - '1 second'::interval)", 
-                            "=", yr, " AND deployment IN ", 
-                            "('", paste(dwp_sites, collapse="', '"), "') ",
+                            "WHERE datetime BETWEEN '", 
+                            start_str, "'::timestamp AND '", end_str, "'::timestamp ", 
+                            "AND deployment IN ('", 
+                            paste(dwp_sites, collapse="', '"), "') ",
                             "AND NOT invalid")
     teom_new_query <- paste0("SELECT datetime, deployment, pm10_1hour_stp AS pm10 ", 
                             "FROM teom.hourly_validated ", 
-                            "WHERE EXTRACT(YEAR FROM datetime - '1 second'::interval)", 
-                            "=", yr, " AND deployment IN ", 
-                            "('", paste(dwp_sites, collapse="', '"), "') ",
+                            "WHERE datetime BETWEEN '", 
+                            start_str, "'::timestamp AND '", end_str, "'::timestamp ", 
+                            "AND deployment IN ('", 
+                            paste(dwp_sites, collapse="', '"), "') ",
                             "AND NOT invalid")
-    teom_df <- data.frame(datetime=c(), deployment=c(), pm10=c(), ws=c(), wd=c())
-    if (yr <= 2017){
+    teom_df <- data.frame(datetime=c(), deployment=c(), pm10=c())
+    if (start_date <= as.Date('2017-09-26')){
+        print("Pulling TEOM data from old table...")
         teom_old_df <- query_db("owenslake", teom_old_query)
         teom_df <- rbind(teom_df, teom_old_df)
     } 
-    if (yr >= 2017){
+    if (end_date > as.Date('2017-09-26')){
+        print("Pulling TEOM data from new table...")
         teom_new_df <- query_db("owenslake", teom_new_query)
         teom_df <- rbind(teom_df, teom_new_df)
     }
@@ -116,9 +126,10 @@ pull_teom_data <- function(yr, teom_sites){
                         "m.wd_wvc AS wd FROM teom.teom_analog_1hour m ", 
                         "JOIN instruments.deployments i ",
                         "ON i.deployment_id=m.deployment_id ", 
-                        "WHERE EXTRACT(YEAR FROM datetime - '1 second'::interval)", 
-                        "=", yr, " AND deployment IN ", 
-                        "('", paste(dwp_sites, collapse="', '"), "');")
+                        "WHERE datetime BETWEEN '", 
+                        start_str, "'::timestamp AND '", end_str, "'::timestamp ", 
+                        "AND deployment IN ('", 
+                        paste(dwp_sites, collapse="', '"), "');")
     teom_met <- query_db("owenslake", teom_met_query)
     teom_df <- left_join(teom_df, teom_met, by=c("datetime", "deployment"))
     teom_df$deployment <- sapply(teom_df$deployment, 
@@ -126,7 +137,7 @@ pull_teom_data <- function(yr, teom_sites){
     return(teom_df)
 }
 
-load_epa_data <- function(teom_sites){
+load_epa_data <- function(start_date, end_date, teom_sites){
     print("Getting EPA site data...")
     epa_codes <- c('81102'='pm10', '61101'='ws_s', '61102'='wd_s', 
                    '61103'='ws_r', '61104'='wd_r')
@@ -134,18 +145,17 @@ load_epa_data <- function(teom_sites){
                    'DS'='0022', 'ST'='0026', 'CJ'='1001', 'OL'='0021')
     epa_sites <- names(teom_sites)[names(teom_sites) %in% names(epa_xwalk)]
     df1 <- read_csv("~/code/dust_pic/data/epa.csv", col_types="cDticdc")
-    names(df1) <- c('deployment', 'date', 'hour', 'code', 'desc', 'value', 'units')
+    names(df1) <- c('deployment', 'date_utc', 'hour_utc', 'code', 'desc', 'value', 'units')
     df2 <- filter(df1, deployment %in% epa_xwalk[epa_sites])
     df2$deployment <- sapply(df2$deployment, 
                               function(x) names(epa_xwalk)[which(epa_xwalk==x)])
-    df2$datetime_utc <- as.POSIXct(paste0(df2$date, " ", df2$hour), tz='UTC', 
+    df2$datetime_utc <- as.POSIXct(paste0(df2$date_utc, " ", df2$hour_utc), tz='UTC', 
                                  format="%Y-%m-%d %H:%M")
     df2$datetime <- sapply(df2$datetime_utc, rezone)
     df2$datetime <- as.POSIXct(df2$datetime, origin="1970-01-01")
     df2$date <- date(df2$datetime - 1)
-    df2$year <- year(df2$datetime - 1)
 
-    df3 <- df2 %>% 
+    df3 <- df2 %>% filter(between(date, start_date, end_date)) %>%
         select(datetime, deployment, code, value) %>%
         spread(code, value)
     names(df3) <- sapply(names(df3), function(x) ifelse(x %in% names(epa_codes), 
@@ -162,6 +172,13 @@ load_epa_data <- function(teom_sites){
     } else{
         names(df3)[which(grepl('ws', names(df3)))] <- 'ws'
     }
+    for (nm in c('ws', 'wd', 'pm10')){
+        if (!(nm %in% names(df3))){
+            df3 <- cbind(df3, data.frame(x=rep(NA, nrow(df3))))
+            names(df3)[names(df3)=='x'] <- nm
+        }
+    }
+    df3$ws <- df3$ws * 0.5144 # change wind speed from knots to m/s
     return(df3)
 }
 

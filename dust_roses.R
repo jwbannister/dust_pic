@@ -17,24 +17,50 @@ available_sites <- c('DS'='Dirty Socks', 'SC'='Shell Cut', 'ST'='Stanley',
 map_areas <- list('South'=available_sites[c('DS', 'SC', 'ST', 'OL', 'HW', 'CJ')],
                   'Shoreline'=available_sites[c('DS', 'SC', 'ST', 'NB', 'LT',
                                                 'OL', 'MS', 'KS')])
-start_date <- as.Date("2014-01-01")
-end_date <- as.Date("2014-12-31")
-refresh_data <- TRUE
+start_date <- as.Date("2015-01-01")
+end_date <- as.Date("2018-12-31")
 map_view <- 'South' #South or Shoreline
 
 site_list <- map_areas[[map_view]]
 site_locs <- pull_site_locations(site_list)
 
+yrs <- seq(year(start_date), year(end_date), 1)
+prd <- vector(mode="list", length=length(yrs))
+for (i in 1:length(yrs)){
+    yr <- yrs[i]
+    prd[[i]] <- c(as.Date(paste0(yr, "-01-01")), as.Date(paste0(yr, "-12-31")))
+}
+
+refresh_data <- FALSE
 if (refresh_data){
-    mfile_df <- pull_mfile_data(start_date, end_date, site_list)
-    teom_df <- pull_teom_data(i, site_list)
-    epa_df <- load_epa_data(site_list)
-    dfx <- rbind(mfile_df, teom_d, epa_df)
+    df1 <- data.frame(datetime=c(), deployment=c(), ws=c(), wd=c(), pm10=c())
+    for (i in 1:length(prd)){
+        print(year(prd[[i]][1]))
+        epa_df <- load_epa_data(prd[[i]][1], prd[[i]][2], site_list)
+        if (nrow(epa_df)>0){
+            if (date(max(epa_df$datetime)-1) < as.Date(prd[[i]][2])){
+                mfile_df <- pull_mfile_data(date(max(epa_df$datetime)-1), 
+                                            prd[[i]][2], site_list)
+                epa_df <- epa_df %>% filter(date(datetime-1)!=date(max(datetime)-1)) %>%
+                    rbind(mfile_df)
+            }
+        } else{
+            epa_df <- pull_mfile_data(prd[[i]][1], prd[[i]][2], site_list)
+        }
+        teom_df <- pull_teom_data(prd[[i]][1], prd[[i]][2], site_list)
+        dfx <- rbind(teom_df, epa_df)
+        df1 <- rbind(df1, dfx)
+    }
     save(df1, file=paste0(path, "/dust_pic_data.RData"))
 } else{
     print("Using previously stored data...")
     load(paste0(path, "/dust_pic_data.RData"))
 }
+
+v <- 'pm10'
+data_continuity_plot <-df1 %>% ggplot(aes_string(x='datetime', y=v)) +
+    geom_point() +
+    facet_grid(rows=vars(deployment))
 
 onlake_dir <- list('LP'=c(126, 176), 
                    'KE'=c(151, 296), 
@@ -52,6 +78,9 @@ onlake_dir <- list('LP'=c(126, 176),
 df2 <- df1 %>% rowwise() %>%
     mutate(onlake=angle_between(onlake_dir[[deployment]], wd)) %>%
     ungroup()
+df2$date <- date(df2$datetime - 1)
+df2 <- df2[!duplicated(data.frame(df2$datetime, df2$deployment)), ]
+df2 <- filter(df2, pm10 > -15)
 
 check_days <- df2 %>% group_by(date, deployment) %>% 
     summarize(n=length(date)) %>% arrange(desc(n))
@@ -154,10 +183,13 @@ for (dt in as.character(exceed_days)){
             geom_label(data=label_data,
                        mapping=aes(x=x, y=y, label=pm10_24),
                        color=label_data$flag.color, size=3, 
-                       label.padding=unit(0.15, "lines"))
+                       label.padding=unit(0.15, "lines")) +
+            geom_text(data=site_locs, 
+                       mapping=aes(x=x, y=y, label=name),
+                       size=4, nudge_y=-1000, family='mono', fontface='plain')
     }
     fl <- paste0(path, "/pdfs/", format(as.Date(dt), "%Y-%m-%d"),
-                 "_shoreline_exceedance.pdf")
+                 map_view, "_exceedance.pdf")
     pdf(file=fl, width=8, height=10.5, paper="letter")
     print(p3)
     dev.off()
