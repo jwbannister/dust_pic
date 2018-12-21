@@ -4,7 +4,6 @@ library(lubridate)
 library(ggplot2)
 library(RColorBrewer)
 library(grid)
-library(ggmap)
 airsci_loc <- Sys.getenv("R_AIRSCI")
 load_all(airsci_loc)
 path <- "~/code/dust_pic"
@@ -36,7 +35,7 @@ if (refresh_data){
     df1 <- data.frame(datetime=c(), deployment=c(), ws=c(), wd=c(), pm10=c())
     for (i in 1:length(prd)){
         print(year(prd[[i]][1]))
-        epa_df <- load_epa_data(prd[[i]][1], prd[[i]][2], site_list)
+        epa_df <- load_hourly_epa_data(prd[[i]][1], prd[[i]][2], site_list)
         if (nrow(epa_df)>0){
             if (date(max(epa_df$datetime)-1) < as.Date(prd[[i]][2])){
                 mfile_df <- pull_mfile_data(date(max(epa_df$datetime)-1), 
@@ -85,34 +84,48 @@ df2 <- filter(df2, pm10 > -15)
 check_days <- df2 %>% group_by(date, deployment) %>% 
     summarize(n=length(date)) %>% arrange(desc(n))
 
-daily_sum <- df2 %>% group_by(date, deployment) %>%
-    do(pm10_24=avg_pm10(.$pm10)[['avg_pm10']], n=avg_pm10(.$pm10)[['n']], 
-              pm10_onlake=avg_pm10(filter(., onlake)$pm10)[['avg_pm10']], 
-              n_onlake=avg_pm10(filter(., onlake)$pm10)[['n']], 
-              pm10_offlake=avg_pm10(filter(., !onlake)$pm10)[['avg_pm10']], 
-              n_offlake=avg_pm10(filter(., !onlake)$pm10)[['n']]) %>%
-    mutate(pm10_24=unlist(pm10_24), n=unlist(n), 
-           pm10_onlake=unlist(pm10_onlake), n_onlake=unlist(n_onlake), 
-           pm10_offlake=unlist(pm10_offlake), n_offlake=unlist(n_offlake))
-daily_sum$flag.color <- if_else(daily_sum$pm10_24>150, "red", "black") 
+haiwee_daily <- df2 %>% group_by(date, deployment) %>% filter(deployment=='HW') %>%
+    do(pm10_24=round(sum(.$pm10, na.rm=T)/sum(!is.na(.$pm10)), 0), 
+              pm10_onlake=round(sum(filter(., onlake)$pm10, na.rm=T)/
+                                sum(!is.na(.$pm10)), 0), 
+              pm10_offlake=round(sum(filter(., !onlake)$pm10, na.rm=T)/
+                                 sum(!is.na(.$pm10)), 0)) %>%
+    mutate(pm10_24=unlist(pm10_24), pm10_onlake=unlist(pm10_onlake),
+           pm10_offlake=unlist(pm10_offlake))
+haiwee_daily$year <- year(haiwee_daily$date)
 
-if (map_view=='South'){
-    exceeds <- filter(daily_sum, pm10_24>=150 & deployment %in% c('OL', 'HW', 'CJ'))
-} else if (map_view=='Shoreline'){
-    exceeds <- filter(daily_sum, pm10_24>=150 & !(deployment %in% c('HW', 'CJ')))
+haiwee_sum <- haiwee_daily %>% ungroup() %>% group_by(year) %>%
+    summarize(avg_pm10=mean(pm10_24, na.rm=T), 
+              max_pm10=max(pm10_24, na.rm=T), 
+              max_onlake=max(pm10_onlake, na.rm=T), 
+              max_offlake=max(pm10_offlake, na.rm=T), 
+              percent_data=length(pm10_24)/365)
+
+for (yr in haiwee_sum$year){
+    haiwee_continuity_plot <- haiwee_daily %>% filter(year==yr) %>%
+        ggplot(aes(x=date, y=pm10_24)) +
+        geom_point(color='blue') +
+        ylab("24-Hour PM10") + xlab("Date")
+    png(paste0("~/owens/coso_pm10/plots/p_", yr, ".png"), 
+        height=2, width=6, res=300, units="in")
+    print(haiwee_continuity_plot)
+    dev.off()
 }
-    
-exceed_days <- sort(unique(exceeds$date))
-valueseq <- c(10, 50, 100, 150)
-legend.data <- df2 %>% filter(deployment==df2$deployment[1])
-legend.data$pm10[1] <- NA
-legend.plot <- legend.data %>%
-    plot_rose(., value='pm10', dir='wd', valueseq=valueseq,
-              legend.title=bquote('P'*M[10]~'('*mu*'g/'*m^3*')'), 
-              reverse.bars=T)
-legnd <- g_legend(legend.plot)
 
-shoreline <- pull_shoreline_polygon()
+daily_sum <- df2 %>% group_by(date, deployment) %>%
+    do(pm10_24=avg_pm10(.$pm10)[['avg_pm10']]) %>%
+    mutate(pm10_24=unlist(pm10_24))
+if (map_view=='South'){
+    epa_daily <- load_daily_epa_data(start_date, end_date, site_list)
+    names(epa_daily)[3] <- 'pm10_24'
+    daily_sum <- rbind(daily_sum, filter(epa_daily, deployment=='CJ'))
+} 
+daily_sum$year <- year(daily_sum$date)
+    
+daily_sum$flag.color <- if_else(daily_sum$pm10_24>150, "red", "black") 
+exceeds <- filter(daily_sum, pm10_24>=150 & deployment %in% c('CJ'))
+exceed_days <- sort(unique(exceeds$date))
+print(exceed_days)
 
 if (map_view=='Shoreline'){
     plot_range <- c('xmin'=404866, 'xmax'=426166, 'ymin'=4015506, 'ymax'=4052866)
@@ -125,43 +138,12 @@ if (map_view=='Shoreline'){
     logo_range <- c(plot_range[1], plot_range[1]+5000, plot_range[3]-1000, plot_range[3]+3000)
     text_range <- c(plot_range[2]-7000, plot_range[2], plot_range[3]-3000, plot_range[3])
 }
+valueseq <- c(10, 50, 100, 150)
 
-photo_back <- FALSE
-if (photo_back){
-    google_key = Sys.getenv("OWENS_MAPS_KEY")
-    background <- photo_background(plot_range[1], plot_range[2], plot_range[3], 
-                                   plot_range[4], zone='11N', key=google_key)
-    p1 <- background + 
-        geom_path(data=shoreline, mapping=aes(x=x, y=y, group=area_name))
-} else{
-    p1 <- ggplot(data=shoreline, mapping=aes(x=x, y=y)) +
-        geom_path(mapping=aes(group=area_name))
-}
-p1 <- p1 +
-    xlim(plot_range[1], plot_range[2]) +
-    ylim(plot_range[3], plot_range[4]) +
-    coord_equal() +
-    theme(axis.line=element_blank(),
-          axis.text=element_blank(),
-          axis.ticks=element_blank(),
-          axis.title=element_blank(),
-          panel.background=element_blank(),
-          panel.grid.major=element_blank(),
-          panel.grid.minor=element_blank(),
-          plot.background=element_blank(),
-          plot.title=element_text(size=12, hjust=0.5),
-          plot.subtitle=element_text(hjust=0.5),
-          panel.border=element_rect(color="black", fill="transparent"))
-p2 <- p1 +
-    annotation_custom(logo_grob, xmin=logo_range[1], xmax=logo_range[2],
-                      ymin=logo_range[3], ymax=logo_range[4]) +
-    annotation_custom(legnd, xmin=legnd_range[1], xmax=legnd_range[2],
-                      ymin=legnd_range[3], ymax=legnd_range[4]) +
-    annotation_custom(grid::textGrob(expression(paste("Site Label = 24-hour P", M[10])),
-                                                gp=gpar(fontsize=10)),
-                          xmin=text_range[1], xmax=text_range[2],
-                          ymin=text_range[3], ymax=text_range[4])
+legnd <- build_legend(df2)
+p2 <- background_map(plot_range, logo_range, legnd_range, legnd)
 
+tmp_pdfs <- c()
 for (dt in as.character(exceed_days)){
     print(dt)
     roses <- create_roses(df2, dt)
@@ -188,10 +170,13 @@ for (dt in as.character(exceed_days)){
                        mapping=aes(x=x, y=y, label=name),
                        size=4, nudge_y=-1000, family='mono', fontface='plain')
     }
-    fl <- paste0(path, "/pdfs/", format(as.Date(dt), "%Y-%m-%d"),
-                 map_view, "_exceedance.pdf")
+    fl <- tempfile(fileext=".pdf")
     pdf(file=fl, width=8, height=10.5, paper="letter")
     print(p3)
     dev.off()
+    tmp_pdfs <- c(tmp_pdfs, fl)
 }
+system(paste0("pdfunite ", paste(tmp_pdfs, collapse=" "), " ",  path, "/pdfs/", 
+              start_date, "_to_", max(daily_sum$date), "_", map_view, "_exceedances.pdf"))
+save.image(paste0(path, "/image.RData"))
 

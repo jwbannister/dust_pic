@@ -137,14 +137,14 @@ pull_teom_data <- function( start_date, end_date, teom_sites){
     return(teom_df)
 }
 
-load_epa_data <- function(start_date, end_date, teom_sites){
+load_hourly_epa_data <- function(start_date, end_date, teom_sites){
     print("Getting EPA site data...")
     epa_codes <- c('81102'='pm10', '61101'='ws_s', '61102'='wd_s', 
                    '61103'='ws_r', '61104'='wd_r')
     epa_xwalk <- c('NB'='0029', 'LT'='0028', 'KE'='1003', 'MS'='0030', 'SC'='0025', 
                    'DS'='0022', 'ST'='0026', 'CJ'='1001', 'OL'='0021')
     epa_sites <- names(teom_sites)[names(teom_sites) %in% names(epa_xwalk)]
-    df1 <- read_csv("~/code/dust_pic/data/epa.csv", col_types="cDticdc")
+    df1 <- read_csv("~/code/dust_pic/data/epa_hourly.csv", col_types="cDticdc")
     names(df1) <- c('deployment', 'date_utc', 'hour_utc', 'code', 'desc', 'value', 'units')
     df2 <- filter(df1, deployment %in% epa_xwalk[epa_sites])
     df2$deployment <- sapply(df2$deployment, 
@@ -182,6 +182,27 @@ load_epa_data <- function(start_date, end_date, teom_sites){
     return(df3)
 }
 
+load_daily_epa_data <- function(start_date, end_date, teom_sites){
+    print("Getting EPA daily pm10 data...")
+    epa_codes <- c('81102'='pm10', '61101'='ws_s', '61102'='wd_s', 
+                   '61103'='ws_r', '61104'='wd_r')
+    epa_xwalk <- c('NB'='0029', 'LT'='0028', 'KE'='1003', 'MS'='0030', 'SC'='0025', 
+                   'DS'='0022', 'ST'='0026', 'CJ'='1001', 'OL'='0021')
+    epa_sites <- names(teom_sites)[names(teom_sites) %in% names(epa_xwalk)]
+    df1 <- read_csv("~/code/dust_pic/data/epa_daily.csv", col_types="cDicdc")
+    names(df1) <- c('deployment', 'date', 'code', 'desc', 'value', 'units')
+    df2 <- filter(df1, deployment %in% epa_xwalk[epa_sites])
+    df2$deployment <- sapply(df2$deployment, 
+                              function(x) names(epa_xwalk)[which(epa_xwalk==x)])
+
+    df3 <- df2 %>% filter(between(date, start_date, end_date)) %>%
+        select(date, deployment, code, value) %>%
+        spread(code, value)
+    names(df3) <- sapply(names(df3), function(x) ifelse(x %in% names(epa_codes), 
+                                                        epa_codes[x], x))
+    return(df3)
+}
+
 pull_sand_flux <- function(d){
     query1 <- 
         paste0("SELECT sens.datetime, ic.deployment AS csc, ", 
@@ -205,3 +226,53 @@ pull_sand_flux <- function(d){
     return(a)
 }
 
+background_map <- function(plot_range, logo_range, legnd_range, legend_grob, 
+                           photo_back=FALSE){
+    shoreline <- pull_shoreline_polygon()
+    if (photo_back){
+        google_key = Sys.getenv("OWENS_MAPS_KEY")
+        background <- photo_background(plot_range[1], plot_range[2], plot_range[3], 
+                                       plot_range[4], zone='11N', key=google_key)
+        p1 <- background + 
+            geom_path(data=shoreline, mapping=aes(x=x, y=y, group=area_name))
+    } else{
+        p1 <- ggplot(data=shoreline, mapping=aes(x=x, y=y)) +
+            geom_path(mapping=aes(group=area_name))
+    }
+    p1 <- p1 +
+        xlim(plot_range[1], plot_range[2]) +
+        ylim(plot_range[3], plot_range[4]) +
+        coord_equal() +
+        theme(axis.line=element_blank(),
+              axis.text=element_blank(),
+              axis.ticks=element_blank(),
+              axis.title=element_blank(),
+              panel.background=element_blank(),
+              panel.grid.major=element_blank(),
+              panel.grid.minor=element_blank(),
+              plot.background=element_blank(),
+              plot.title=element_text(size=12, hjust=0.5),
+              plot.subtitle=element_text(hjust=0.5),
+              panel.border=element_rect(color="black", fill="transparent"))
+    p2 <- p1 +
+        annotation_custom(logo_grob, xmin=logo_range[1], xmax=logo_range[2],
+                          ymin=logo_range[3], ymax=logo_range[4]) +
+        annotation_custom(legnd, xmin=legnd_range[1], xmax=legnd_range[2],
+                          ymin=legnd_range[3], ymax=legnd_range[4]) +
+        annotation_custom(grid::textGrob(expression(paste("Site Label = 24-hour P", M[10])),
+                                                    gp=gpar(fontsize=10)),
+                              xmin=text_range[1], xmax=text_range[2],
+                              ymin=text_range[3], ymax=text_range[4])
+    return(p2)
+}
+
+build_legend <- function(df2){
+    legend.data <- df2 %>% filter(deployment==df2$deployment[1])
+    legend.data$pm10[1] <- NA
+    legend.plot <- legend.data %>%
+        plot_rose(., value='pm10', dir='wd', valueseq=valueseq,
+                  legend.title=bquote('P'*M[10]~'('*mu*'g/'*m^3*')'), 
+                  reverse.bars=T)
+    legnd <- g_legend(legend.plot)
+    return(legnd)
+}
