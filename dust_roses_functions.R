@@ -34,7 +34,7 @@ create_roses <- function(dat, dt){
     for (j in unique(df2$deployment)){
         print(j)
         rose_data <- df2 %>% 
-            filter(deployment==j & !is.na(pm10) & date==dt) 
+            filter(deployment==j & !is.na(pm10) & !is.na(wd) & date==dt) 
         if (nrow(rose_data)>0){
             p_rose <- plot_rose_image_only(rose_data, value='pm10', dir='wd',
                                      valueseq=valueseq, reverse.bars=T)
@@ -79,13 +79,15 @@ pull_mfile_data <- function(start_date, end_date, teom_sites){
                      "LT"="LizardTl", "MS"="MillSite", "SC"="ShellCut", 
                      "DS"="DirtySox", "OL"="Olancha", "ST"="Stanley")
     mfile_sites <- names(teom_sites)[names(teom_sites) %in% names(mfile_names)]
-    mfile_query <- paste0("SELECT datetime, site AS deployment, aspd AS ws, ", 
+    mfile_query <- paste0("SELECT TO_CHAR(datetime, 'YYYY-MM-DD HH24:00:00') AS datetime, ",
+                          "site AS deployment, aspd AS ws, ", 
                           "dir AS wd, teom AS pm10 FROM archive.mfile_data ",
                           "WHERE datetime BETWEEN '", 
                           start_str, "'::timestamp AND '", end_str, "'::timestamp ", 
                           "AND site IN ('", 
                           paste(mfile_names[mfile_sites], collapse="', '"), "');")
     mfile_df <- query_db("owenslake", mfile_query)
+    mfile_df$datetime <- as.POSIXct(mfile_df$datetime, format="%Y-%m-%d %H:%M:%S")
     mfile_df$deployment <- sapply(mfile_df$deployment, 
                                   function(x) names(mfile_names)[which(mfile_names==x)])
     return(mfile_df)
@@ -97,14 +99,16 @@ pull_teom_data <- function( start_date, end_date, teom_sites){
     print("Getting LADWP TEOM data...")
     dwp_sites <- teom_sites[names(teom_sites) %in% c('HW')]
     # get teom data from 1 hour average view of old 1-min data if needed
-    teom_old_query <- paste0("SELECT datetime, deployment, pm10_std_avg AS pm10 ", 
+    teom_old_query <- paste0("SELECT TO_CHAR(datetime, 'YYYY-MM-DD HH24:00:00') AS datetime, ", 
+                            "deployment, pm10_std_avg AS pm10 ", 
                             "FROM teom.avg_1hour_validated ", 
                             "WHERE datetime BETWEEN '", 
                             start_str, "'::timestamp AND '", end_str, "'::timestamp ", 
                             "AND deployment IN ('", 
                             paste(dwp_sites, collapse="', '"), "') ",
                             "AND NOT invalid")
-    teom_new_query <- paste0("SELECT datetime, deployment, pm10_1hour_stp AS pm10 ", 
+    teom_new_query <- paste0("SELECT TO_CHAR(datetime, 'YYYY-MM-DD HH24:00:00') AS datetime, ",
+                             "deployment, pm10_1hour_stp AS pm10 ", 
                             "FROM teom.hourly_validated ", 
                             "WHERE datetime BETWEEN '", 
                             start_str, "'::timestamp AND '", end_str, "'::timestamp ", 
@@ -116,13 +120,15 @@ pull_teom_data <- function( start_date, end_date, teom_sites){
         print("Pulling TEOM data from old table...")
         teom_old_df <- query_db("owenslake", teom_old_query)
         teom_df <- rbind(teom_df, teom_old_df)
+        teom_df <- rbind(teom_df, teom_old_df)
     } 
     if (end_date > as.Date('2017-09-26')){
         print("Pulling TEOM data from new table...")
         teom_new_df <- query_db("owenslake", teom_new_query)
         teom_df <- rbind(teom_df, teom_new_df)
     }
-    teom_met_query <- paste0("SELECT m.datetime, i.deployment, m.ws_wvc AS ws, ",
+    teom_met_query <- paste0("SELECT TO_CHAR(m.datetime, 'YYYY-MM-DD HH24:00:00') AS datetime, ",
+                        "i.deployment, m.ws_wvc AS ws, ",
                         "m.wd_wvc AS wd FROM teom.teom_analog_1hour m ", 
                         "JOIN instruments.deployments i ",
                         "ON i.deployment_id=m.deployment_id ", 

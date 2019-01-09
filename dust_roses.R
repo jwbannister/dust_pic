@@ -10,9 +10,9 @@ path <- "~/code/dust_pic"
 source(paste0(path, "/dust_roses_functions.R"))
 
 available_sites <- c('DS'='Dirty Socks', 'SC'='Shell Cut', 'ST'='Stanley', 
-                     'NB'='North Beach', 'LT'='Lizard Tail', 'OL'='Olancha', 
-                     'MS'='Mill Site', 'LP'='Lone Pine', 'KE'='Keeler', 
-                     'HW'='Haiwee', 'CJ'='CoJu-696') 
+    'NB'='North Beach', 'LT'='Lizard Tail', 'OL'='Olancha', 
+    'MS'='Mill Site', 'LP'='Lone Pine', 'KE'='Keeler', 
+    'HW'='Haiwee', 'CJ'='CoJu-696') 
 map_areas <- list('South'=available_sites[c('DS', 'SC', 'ST', 'OL', 'HW', 'CJ')],
                   'Shoreline'=available_sites[c('DS', 'SC', 'ST', 'NB', 'LT',
                                                 'OL', 'MS', 'KS')])
@@ -30,7 +30,7 @@ for (i in 1:length(yrs)){
     prd[[i]] <- c(as.Date(paste0(yr, "-01-01")), as.Date(paste0(yr, "-12-31")))
 }
 
-refresh_data <- FALSE
+refresh_data <- TRUE
 if (refresh_data){
     df1 <- data.frame(datetime=c(), deployment=c(), ws=c(), wd=c(), pm10=c())
     for (i in 1:length(prd)){
@@ -46,6 +46,7 @@ if (refresh_data){
         } else{
             epa_df <- pull_mfile_data(prd[[i]][1], prd[[i]][2], site_list)
         }
+        epa_df$datetime <- as.character(epa_df$datetime)
         teom_df <- pull_teom_data(prd[[i]][1], prd[[i]][2], site_list)
         dfx <- rbind(teom_df, epa_df)
         df1 <- rbind(df1, dfx)
@@ -55,6 +56,9 @@ if (refresh_data){
     print("Using previously stored data...")
     load(paste0(path, "/dust_pic_data.RData"))
 }
+df1$datetime <- as.POSIXct(df1$datetime, format="%Y-%m-%d %H:%M:%S")
+df1 <- filter(df1, !is.na(datetime))
+df1 <- df1[!duplicated(df1[ , 1:2]), ]
 
 v <- 'pm10'
 data_continuity_plot <-df1 %>% ggplot(aes_string(x='datetime', y=v)) +
@@ -80,6 +84,8 @@ df2 <- df1 %>% rowwise() %>%
 df2$date <- date(df2$datetime - 1)
 df2 <- df2[!duplicated(data.frame(df2$datetime, df2$deployment)), ]
 df2 <- filter(df2, pm10 > -15)
+df2 <- filter(df2, !(is.na(datetime)))
+df2 <- filter(df2, year(datetime - 1) < 2019)
 
 check_days <- df2 %>% group_by(date, deployment) %>% 
     summarize(n=length(date)) %>% arrange(desc(n))
@@ -101,6 +107,7 @@ haiwee_sum <- haiwee_daily %>% ungroup() %>% group_by(year) %>%
               max_offlake=max(pm10_offlake, na.rm=T), 
               percent_data=length(pm10_24)/365)
 
+valueseq <- c(10, 50, 100, 150)
 for (yr in haiwee_sum$year){
     haiwee_continuity_plot <- haiwee_daily %>% filter(year==yr) %>%
         ggplot(aes(x=date, y=pm10_24)) +
@@ -110,6 +117,17 @@ for (yr in haiwee_sum$year){
         height=2, width=6, res=300, units="in")
     print(haiwee_continuity_plot)
     dev.off()
+    haiwee_rose <- df2 %>% mutate(year=year(date)) %>%
+        filter(year==yr & !(is.na(wd))) %>%
+        plot_rose(., value='pm10', dir='wd', valueseq=valueseq,
+                  legend.title=bquote('P'*M[10]~'('*mu*'g/'*m^3*')'), 
+                  plot.title=bquote('Haiwee Station P'*M[10]~'Rose'), 
+                  plot.sub.title=yr, 
+                  reverse.bars=T)
+    png(paste0("~/owens/coso_pm10/plots/rose_", yr, ".png"), 
+        height=6, width=6, res=300, units="in")
+    print(haiwee_rose)
+    dev.off()
 }
 
 daily_sum <- df2 %>% group_by(date, deployment) %>%
@@ -118,7 +136,8 @@ daily_sum <- df2 %>% group_by(date, deployment) %>%
 if (map_view=='South'){
     epa_daily <- load_daily_epa_data(start_date, end_date, site_list)
     names(epa_daily)[3] <- 'pm10_24'
-    daily_sum <- rbind(daily_sum, filter(epa_daily, deployment=='CJ'))
+    daily_sum <- rbind(daily_sum, filter(epa_daily, deployment=='CJ' &
+        date>max(filter(daily_sum, deployment=='CJ')$date)))
 } 
 daily_sum$year <- year(daily_sum$date)
     
@@ -138,12 +157,10 @@ if (map_view=='Shoreline'){
     logo_range <- c(plot_range[1], plot_range[1]+5000, plot_range[3]-1000, plot_range[3]+3000)
     text_range <- c(plot_range[2]-7000, plot_range[2], plot_range[3]-3000, plot_range[3])
 }
-valueseq <- c(10, 50, 100, 150)
 
 legnd <- build_legend(df2)
 p2 <- background_map(plot_range, logo_range, legnd_range, legnd)
 
-tmp_pdfs <- c()
 for (dt in as.character(exceed_days)){
     print(dt)
     roses <- create_roses(df2, dt)
@@ -170,13 +187,9 @@ for (dt in as.character(exceed_days)){
                        mapping=aes(x=x, y=y, label=name),
                        size=4, nudge_y=-1000, family='mono', fontface='plain')
     }
-    fl <- tempfile(fileext=".pdf")
+    fl <- paste0("~/owens/coso_pm10/plots/", dt, "_map.pdf")
     pdf(file=fl, width=8, height=10.5, paper="letter")
     print(p3)
     dev.off()
-    tmp_pdfs <- c(tmp_pdfs, fl)
 }
-system(paste0("pdfunite ", paste(tmp_pdfs, collapse=" "), " ",  path, "/pdfs/", 
-              start_date, "_to_", max(daily_sum$date), "_", map_view, "_exceedances.pdf"))
 save.image(paste0(path, "/image.RData"))
-
