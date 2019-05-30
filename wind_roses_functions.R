@@ -29,7 +29,7 @@ avg_pm10 <- function(pm_dat){
     return(out_list)
 }
 
-create_roses <- function(dat, dt){
+create_roses <- function(dat){
     roses <- list(grob=c(), center=c())
     for (j in unique(df2$deployment)){
         print(j)
@@ -315,10 +315,9 @@ background_map <- function(plot_range, logo_range, legnd_range, legend_grob,
 
 build_legend <- function(df2){
     legend.data <- df2 %>% filter(deployment==df2$deployment[1])
-    legend.data$pm10[1] <- NA
     legend.plot <- legend.data %>%
-        plot_rose(., value='pm10', dir='wd', valueseq=valueseq,
-                  legend.title=bquote('P'*M[10]~'('*mu*'g/'*m^3*')'), 
+        plot_rose(., value='ws', dir='wd', valueseq=valueseq,
+                  legend.title="Wind Speed (m/s)", 
                   reverse.bars=T)
     legnd <- g_legend(legend.plot)
     return(legnd)

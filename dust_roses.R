@@ -15,10 +15,10 @@ available_sites <- c('DS'='Dirty Socks', 'SC'='Shell Cut', 'ST'='Stanley',
     'HW'='Haiwee', 'CJ'='CoJu-696') 
 map_areas <- list('South'=available_sites[c('DS', 'SC', 'ST', 'OL', 'HW', 'CJ')],
                   'Shoreline'=available_sites[c('DS', 'SC', 'ST', 'NB', 'LT',
-                                                'OL', 'MS', 'KS')])
-start_date <- as.Date("2015-01-01")
+                                                'OL', 'MS', 'KE')])
+start_date <- as.Date("2017-01-01")
 end_date <- as.Date("2018-12-31")
-map_view <- 'South' #South or Shoreline
+map_view <- 'Shoreline' #South or Shoreline
 
 site_list <- map_areas[[map_view]]
 site_locs <- pull_site_locations(site_list)

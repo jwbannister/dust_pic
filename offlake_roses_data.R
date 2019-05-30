@@ -51,7 +51,7 @@ mfile_df$datetime <- as.POSIXct(paste0(as.Date(mfile_df$date,
                                                format="%m/%d/%Y"), " ", 
                                        mfile_df$hour/100, ":00:00")) 
 mfile_df[mfile_df==-9999] <- NA
-mfile_df <- mfile_df %>% filter(year(datetime %m-% seconds(1))>=2015)
+mfile_df <- mfile_df %>% filter(year(datetime %m-% seconds(1))>=2012)
 
 # gap fill Dirty Socks met data from Shell Cut
 ds_gap <- filter(mfile_df, is.na(wd) & abrv=='DS')$datetime
@@ -95,20 +95,21 @@ mfile_df <- mfile_df %>% left_join(gap_data0, by=c("abrv", "datetime")) %>%
 
 mfile_df <- mfile_df %>% left_join(site_labels, by="abrv")
 mfile_df <- mfile_df[!is.na(mfile_df$teom), ]
-last_mfile <- as.character(max(as.Date(mfile_df$date)))
 
-query6 <- paste0("SELECT i.deployment, m.datetime, m.aspd AS ws, ",
-                 "m.dir AS wd, m.teom ",
-                 "FROM archive.mfile_data m ",
-                 "JOIN instruments.deployments i ",
-                 "ON m.deployment_id=i.deployment_id ",
-                 "WHERE (m.datetime - '1 second'::interval)::date >= ",
-                 "('", last_mfile, "'::date + '1 day'::interval) ", 
-                 "AND i.deployment IN ('", paste(loc_list, collapse="', '"), "');")
-db_mfile <- query_db("owenslake", query6) %>%
-    left_join(site_labels, by="deployment")
-
-mfile_df <- rbind(select(filter(mfile_df, date<'2017-07-01'), -date, -hour), 
-                  filter(db_mfile, (datetime %m-% seconds(1))>='2017-07-01'))
-mfile_df$date <- as.Date(mfile_df$datetime %m-% seconds(1), 
-                         tz="America/Los_Angeles")
+#last_mfile <- as.character(max(as.Date(mfile_df$date)))
+# fill with mfile data up to current date
+#query6 <- paste0("SELECT i.deployment, m.datetime, m.aspd AS ws, ",
+#                 "m.dir AS wd, m.teom ",
+#                 "FROM archive.mfile_data m ",
+#                 "JOIN instruments.deployments i ",
+#                 "ON m.deployment_id=i.deployment_id ",
+#                 "WHERE (m.datetime - '1 second'::interval)::date >= ",
+#                 "('", last_mfile, "'::date + '1 day'::interval) ", 
+#                 "AND i.deployment IN ('", paste(loc_list, collapse="', '"), "');")
+#db_mfile <- query_db("owenslake", query6) %>%
+#    left_join(site_labels, by="deployment")
+#
+#mfile_df <- rbind(select(filter(mfile_df, date<'2017-07-01'), -date, -hour), 
+#                  filter(db_mfile, (datetime %m-% seconds(1))>='2017-07-01'))
+#mfile_df$date <- as.Date(mfile_df$datetime %m-% seconds(1), 
+#                         tz="America/Los_Angeles")

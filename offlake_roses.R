@@ -30,7 +30,7 @@ angle_between <- function(angle_vec, angle){
     }
 }
 
-df2 <- mfile_df %>% rowwise() %>%
+df1 <- mfile_df %>% rowwise() %>%
     mutate(onlake=angle_between(onlake_dir[[abrv]], wd),
            dunes=angle_between(dunes_dir, wd) & deployment=='Keeler') %>%
     ungroup()
@@ -56,6 +56,7 @@ exceeds$dunes <- rep(NA, nrow(exceeds))
 exceeds <- exceed_process(exceeds)
 
 days <- exceeds %>% ungroup() %>% mutate(yr = year(date)) %>%
+    filter(yr<2019) %>%
     group_by(yr) %>%
     summarize(exceedance_days = length(pm10_24))
 
