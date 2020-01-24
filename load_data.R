@@ -1,8 +1,9 @@
 library(tidyverse)
 library(lubridate)
-library(sp)
-library(rgdal)
-library(scales)
+library(jsonlite)
+#library(sp)
+#library(rgdal)
+#library(scales)
 airsci_loc <- Sys.getenv("R_AIRSCI")
 load_all(airsci_loc)
 
@@ -18,29 +19,31 @@ inst_xwalk <- c('DS'='Dirty Socks', 'SC'='Shell Cut', 'ST'='Stanley',
               'NB'='North Beach', 'LT'='Lizard Tail', 'OL'='Olancha', 
               'MS'='Mill Site', 'LP'='Lone Pine', 'KE'='Keeler') 
 
-teoms = c('SC', 'DS', 'ST', 'OL')
+teoms = names(epa_xwalk)
 
 # make first attempt at data through EPA AQS website
+# see https://aqs.epa.gov/aqsweb/documents/data_api.html
 # check EPA API service status
-readLines("https://aqs.epa.gov/api/serviceAvailable", warn=F)
+readLines("https://aqs.epa.gov/data/api/metaData/isAvailable", warn=F)
+
 epa_codes <- c('pm10'='81102', 'ws_sc'='61101', 'wd_sc'='61102',
                'wd_rs'='61104', 'ws_rs'='61103')
+
 url_query <- c()
 tick <- 1
-for (i in epa_xwalk[teoms]){
-    for (j in epa_codes){
-        url_query[tick] <- paste0("https://aqs.epa.gov/api/rawData", 
-                                  "?user=jbannister@airsci.com", 
-                                  "&pw=tealcrane32&format=DMCSV&param=", j, 
-                                  "&state=06&county=027",
-                                  "&bdate=", format(start_date, '%Y%m%d'),  
-                                  "&edate=", format(end_date, '%Y%m%d'))
-        tick <- tick + 1
-    }
+for (j in epa_codes){
+    url_query[tick] <- paste0("https://aqs.epa.gov/api/sampleData/byCounty", 
+                              "?user=jbannister@airsci.com", 
+                              "&pw=ecruhawk34&param=", j, 
+                              "&state=06&county=027",
+                              "&bdate=", format(start_date, '%Y%m%d'),  
+                              "&edate=", format(end_date, '%Y%m%d'))
+    tick <- tick + 1
 }
+
 epa_df <- data.frame()
 for (k in url_query){
-    dat <- read_csv(k)
+    dat <- fromJSON(k)
     dat <- dat[dat[1, 1] != 'END OF FILE', ]
     if (nrow(dat)>0) epa_df <- rbind(epa_df, dat)
 }
@@ -64,7 +67,6 @@ site_labels <- query_db("owenslake", query2)
 site_labels$abrv <- sapply(site_labels$deployment, function(x)
                            names(loc_list)[which(loc_list==x)])
 site_labels$site <- sapply(site_labels$abrv, function(x) mfile_sites[x])
-
 
 
 
