@@ -56,7 +56,7 @@ pull_mfile_data <- function(start_date, end_date, teom_sites){
     print("Getting mfile data...")
     print(paste0(start_date, " through ", end_date))
     mfile_query <- paste0("SELECT datetime::text, site AS deployment, aspd AS ws, ", 
-                          "dir AS wd, teom AS pm10 ",
+                          "dir AS wd, teom AS pm10, from_lake AS onlake_wd ",
                           "FROM archive.mfile_data ",
                           "WHERE (datetime - '1 second'::interval)::date ",
                           "BETWEEN '", start_date, "'::date AND '", end_date, "'::date ", 
@@ -70,7 +70,28 @@ pull_mfile_data <- function(start_date, end_date, teom_sites){
     mfile_df$date <- date(mfile_df$datetime - 1)
     mfile_df$abrv <- sapply(mfile_df$deployment,
                             function(x) names(teom_sites)[which(teom_sites==x)])
+    mfile_df$valid <- FALSE
     return(mfile_df)
+}
+
+pull_valid_data <- function(start_date, end_date, teom_sites){
+    print("Getting valid data...")
+    print(paste0(start_date, " through ", end_date))
+    query1 <- paste0("SELECT datetime::text, site AS deployment, ws, wd, pm10, onlake_wd ",
+                     "FROM archive.gb_teom_validated ",
+                      "WHERE (datetime - '1 second'::interval)::date ",
+                      "BETWEEN '", start_date, "'::date AND '", end_date, "'::date ", 
+                      "AND site IN ('", paste(teom_sites, collapse="', '"), "');")
+    df1 <- query_db("owenslake", query1)
+    df1$datetime <- as.POSIXct(df1$datetime, format="%Y-%m-%d %H:%M:%S", tz='America/Los_Angeles')
+    df1 <- df1 %>% filter(pm10>-15) %>% filter(!is.na(datetime)) %>%
+        filter(!is.na(pm10))
+    df1 <- df1[!duplicated(df1[ , 1:2]), ]
+    df1$date <- date(df1$datetime - 1)
+    df1$abrv <- sapply(df1$deployment,
+                            function(x) names(teom_sites)[which(teom_sites==x)])
+    df1$valid <- TRUE
+    return(df1)
 }
 
 background_map <- function(plot_range, logo_range, logo_grob, legnd_range, legend_grob){

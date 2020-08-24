@@ -12,32 +12,41 @@ source("/Users/john/code/dust_pic/rose_map_functions.R")
 mfile_names <- c('LP'='LonePine', 'KE'='Keeler', 'NB'='NorthBch', 
                  'LT'='LizardTl', 'MS'='MillSite', 'SC'='ShellCut', 
                  'DS'='DirtySox', 'OL'='Olancha', 'ST'='Stanley')
+valid_names <- c('DS'='Dirty Socks', 'SC'='Shell Cut', 'ST'='Bill Stanley',
+                 'NB'='North Beach', 'LT'='Lizard Tail', 'OL'='Olancha',
+                 'MS'='Mill', 'LP'='Lone Pine', 'KE'='Keeler')
 deployments <- c('DS'='Dirty Socks', 'SC'='Shell Cut', 'ST'='Stanley',
                  'NB'='North Beach', 'LT'='Lizard Tail', 'OL'='Olancha',
                  'MS'='Mill Site', 'LP'='Lone Pine', 'KE'='Keeler')
-# onlake wind directions from 2016 Owens SIP, Table 7.2
-onlake_dir <- list('LonePine'=c(126, 176), 
-                   'Keeler'=c(151, 296), 
-                   'ShellCut'=c(227, 33), 
-                   'DirtySox'=c(234, 50), 
-                   'Olancha'=c(333, 39), 
-                   'Stanley'=c(349, 230), 
-                   'NorthBch'=c(55, 250), 
-                   'LizardTl'=c(128, 288), 
-                   'MillSite'=c(157, 333))
 
-start_date <- as.Date('2019-01-01')
-end_date <- as.Date('2019-12-31')
+start_date <- as.Date('2017-01-01')
+end_date <- as.Date('2020-12-01')
+
+valid_df <-  pull_valid_data(start_date, end_date, valid_names)
 
 mfile_df <- pull_mfile_data(start_date, end_date, mfile_names)
 
+df1 <- valid_df %>% full_join(mfile_df, by=c('abrv', 'datetime'), suffix = c(".valid", ".mfile"))
+for (x in c('date', 'ws', 'wd', 'pm10', 'onlake_wd', 'valid')){
+    df1[[x]] <- coalesce(df1[[paste0(x, ".valid")]], df1[[paste0(x, ".mfile")]]) 
+}
+df1 <- df1 %>% select(datetime, abrv, date, ws, wd, pm10, onlake_wd, valid)
+df1$deployment = sapply(df1$abrv, function(x) deployments[x])
+
+mixed_valid <- df1 %>% group_by(date, abrv) %>%
+    summarize(n_valid = sum(valid), n_notvalid = sum(!valid)) %>%
+    filter(n_valid>0 & n_notvalid>0)
+for (i in seq(1, nrow(mixed_valid))){
+    df1 <- df1 %>% filter(!(date==mixed_valid$date[i] & abrv==mixed_valid$abrv[i] & !valid))
+}
+
 site_locs <- pull_site_locations(deployments)
 
-# pm10_continuity_plot <- data_cont(mfile_df, 'pm10')
+exceeds <- df1 %>% group_by(date, abrv) %>%
+    summarize(pm10_avg = sum(pm10)/length(pm10)) %>%
+    filter(pm10_avg>=150)
 
-daily_sum <- mfile_df %>% group_by(date, abrv) %>%
-    summarize(pm10_avg = sum(pm10)/length(pm10))
-exceeds <- filter(daily_sum, pm10_avg>=150)
+exceeds %>% group_by(date) %>% summarize(no_sites_exceeding = length(pm10_avg))
 
 plot_range <- c('xmin'=405000, 'xmax'=429000, 'ymin'=4012000, 'ymax'=4053000)
 legnd_range <- c(plot_range[2]-4000, plot_range[2], plot_range[4]-4000, plot_range[4])
@@ -45,68 +54,60 @@ text_range <- c(plot_range[2]-5000, plot_range[2]-2000, plot_range[4]-8000, plot
 logo_range <- c(plot_range[2]-5000, plot_range[2], plot_range[3], plot_range[3]+5000)
 
 value_seq <- c(20, 50, 100, 150)
-legend_grob <- build_legend(mfile_df, valueseq=value_seq)
+legend_grob <- build_legend(df1, valueseq=value_seq)
 logo_grob <- grob_logo("/Users/john/Documents/AIRSCI Logo.jpg")
-p2 <- background_map(plot_range, logo_range, logo_grob, legnd_range, legend_grob)
+p1 <- background_map(plot_range, logo_range, logo_grob, legnd_range, legend_grob)
 
 for (dt in as.character(unique(exceeds$date))){
     print(dt)
-    mfile_address = paste0("https://www.gbuapcd.org/Docs/OwensLake/Yesterday/CalPuff/archive/",
-                               substring(year(as.Date(dt)), 3), sprintf("%02d", month(as.Date(dt))),
-                               sprintf("%02d", day(as.Date(dt))), "M.csv")
-    update_m <- read.csv(url(mfile_address))
-    update_m$deployment <- sapply(update_m$Site, function(x) strsplit(x, "_")[[1]][1])
-    update_m$var <- sapply(update_m$Site, function(x) strsplit(x, "_")[[1]][2])
+    df2 <- filter(df1, date==dt)
 
-    update_df <- update_m %>% select(-Teom_24Hr, -MxTeom, -Msng_Hrs, -MxASpd) %>%
-        select(-Site) %>% filter(deployment %in% mfile_names) %>%
-        gather('hr', 'value', -deployment, -Date, -var) %>% rename('date'=Date)
-    update_teom <- update_df %>% filter(deployment %in% mfile_names & var=='Teom') %>%
-        rename('pm10'=value) %>% select(-var)
-    update_dir <- update_df %>% filter(deployment %in% mfile_names & var=='Dir') %>%
-        rename('wd'=value) %>% select(-var)
-    update_final <- update_teom %>% left_join(update_dir, by=c('date', 'deployment', 'hr')) %>%
-        filter(pm10>-15) %>% filter(!is.na(pm10))
+    # one-off fix for missing wd data for Olancha on particular exceedance day
+    for (i in seq(1, nrow(df2))){
+        if (df2$abrv[i]=='OL'){
+            df2$onlake_wd[i] <- TRUE
+        }
+    }
 
-    update_final <- update_final %>% rowwise() %>%
-        mutate(onlake=angle_between(onlake_dir[[deployment]], wd)) %>%
-        filter(!is.na(onlake)) %>%
-        ungroup()
-    update_final$onlake <- sapply(update_final$onlake, function(x) ifelse(x, 'onlake', 'offlake'))
-    update_final$abrv <- sapply(update_final$deployment,
-                            function(x) names(teom_sites)[which(teom_sites==x)])
-
-    onlake_count <- update_final %>% group_by(date, deployment, onlake) %>%
+    onlake_count <- df2 %>% group_by(date, deployment, onlake_wd) %>%
         summarize(hrs = length(pm10)) %>%
-        spread(onlake, hrs, fill=0)
+        filter(!is.na(onlake_wd)) %>%
+        spread(onlake_wd, hrs, fill=0)
     names(onlake_count) <- c('date', 'deployment', 'hrs_offlake', 'hrs_onlake')
-    daily_sum <- update_final %>% group_by(date, deployment) %>%
-        summarize(pm10_avg = sum(pm10)/length(pm10))
-    exceeds <- filter(daily_sum, pm10_avg>=150)
-    exceed_sites <- exceeds %>% filter(date==dt)
 
-    breakdown <- update_final %>% group_by(date, deployment, onlake) %>%
-        summarize(pm10 = sum(pm10)/length(pm10)) %>%
-        spread(onlake, pm10, fill=0) %>%
-        left_join(onlake_count, on=c('date', 'deployment')) %>%
-        left_join(daily_sum, on=c('date', 'deployment'))
+    daily_sum <- df2 %>% group_by(date, deployment) %>%
+        summarize(pm10_avg = round(sum(pm10)/length(pm10), 0))
+    exceed_sites <- daily_sum %>% filter(pm10_avg>=150 & date==dt)
+
+    breakdown <- df2 %>% 
+        group_by(abrv) %>%
+        mutate(n_hours = length(pm10)) %>% ungroup() %>%
+        group_by(deployment, abrv, onlake_wd) %>%
+        summarize(pm10 = round(sum(pm10)/mean(n_hours), 0)) %>%
+        spread(onlake_wd, pm10, fill=0) %>%
+        rename(onlake = 'TRUE', offlake = 'FALSE') %>%
+        left_join(onlake_count, on=c('deployment')) %>%
+        mutate(pm10_avg = (round(offlake + onlake, 0)))
     breakdown$flag_color <- if_else(breakdown$pm10_avg>150, "red", "black") 
-    breakdown$abrv <- sapply(breakdown$deployment,
-                            function(x) names(mfile_names)[which(mfile_names==x)])
 
     legend_text <- bquote("Site Label = 24-hour PM"[10])
-    if (between(as.Date(dt), as.Date(min(mfile_df$datetime)), as.Date(max(mfile_df$datetime)))){
+    if (any(!df2$valid)){
         legend_text <- bquote(atop("Site Label = 24-hour PM"[10], "(estimate from preliminary data)"))
     }
-    p2 <- p2 + annotation_custom(grid::textGrob(legend_text, gp=gpar(fontsize=10)),
+    p2 <- p1 + annotation_custom(grid::textGrob(legend_text, gp=gpar(fontsize=10)),
                                  xmin=text_range[1], xmax=text_range[2],
                                  ymin=text_range[3], ymax=text_range[4])
-    roses <- create_roses(mfile_df, dt, value_seq)
+    roses <- create_roses(df2, dt, value_seq)
     buffer <- 4000
+    if (any(!df2$valid)){
+        sub_title = "(from preliminary, unvalidated data)"
+    } else{
+        sub_title = ""
+    }
     p3 <- p2 +
         ggtitle(substitute(paste("Hourly P",  M[10], " Roses for ", d),
                            list(d=format(as.Date(dt), "%m-%d-%Y"))),
-                subtitle="CONFIDENTIAL ATTORNEY-CLIENT WORK PRODUCT")
+        subtitle = sub_title)
     site_table <- breakdown %>% ungroup() %>% 
         filter(deployment %in% exceed_sites$deployment) %>%
         select(-deployment) %>% filter(date==dt) %>%
@@ -153,7 +154,7 @@ for (dt in as.character(unique(exceeds$date))){
                           ymin=plot_range['ymin'] + 6000,
                           ymax=plot_range['ymin'] + 6500) +
         geom_label(data=label_data,
-                   mapping=aes(x=x, y=y, label=round(pm10_avg, 0)),
+                   mapping=aes(x=x, y=y, label=pm10_avg),
                    color=label_data$flag_color, size=3, 
                    label.padding=unit(0.15, "lines")) +
         geom_text(data=label_data, 
@@ -174,14 +175,18 @@ for (dt in as.character(unique(exceeds$date))){
     print(p4)
     dev.off()
 
-    yesterday_map = paste0(path, "/", dt, "_yesterday.pdf")
-    yesterday_address = paste0("https://www.gbuapcd.org/Docs/OwensLake/Yesterday/CalPuff/archive/",
-                               substring(year(as.Date(dt)), 3), sprintf("%02d", month(as.Date(dt))),
-                               sprintf("%02d", day(as.Date(dt))), ".pdf")
-    download.file(yesterday_address, yesterday_map, method="libcurl")
+    fl2 <- paste0("/Users/john/code/dust_pic/output/", dt, "_map.png")
+    png(file=fl2, width=8, height=10.5, units="in", res=300)
+    print(p4)
+    dev.off()
+
+#    yesterday_map = paste0(path, "/", dt, "_yesterday.pdf")
+#    yesterday_address = paste0("https://www.gbuapcd.org/Docs/OwensLake/Yesterday/CalPuff/archive/",
+#                               substring(year(as.Date(dt)), 3), sprintf("%02d", month(as.Date(dt))),
+#                               sprintf("%02d", day(as.Date(dt))), ".pdf")
+#    download.file(yesterday_address, yesterday_map, method="libcurl")
 }
 fl_lst <- list.files(path)
 out_file <- paste0("Shoreline_Summary_", start_date, "_to_", end_date, ".pdf")
 system(paste0("/System/Library/Automator/Combine\\ PDF\\ Pages.action/Contents/Resources/join.py ",
               "-o /Users/john/code/dust_pic/output/", out_file, " ", path, "/*.pdf"))
-
